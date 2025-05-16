@@ -17,17 +17,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Using Include="Xunit"/>
-    </ItemGroup>
-
-    <ItemGroup>
-      <Reference Include="MongoDB.Driver">
-        <HintPath>..\..\..\..\.nuget\packages\mongodb.driver\3.4.0\lib\net6.0\MongoDB.Driver.dll</HintPath>
-      </Reference>
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\..\Core\MongoRepository.csproj" />
+      <ProjectReference Include="..\Core\MongoRepository.csproj" />
     </ItemGroup>
 
 </Project>

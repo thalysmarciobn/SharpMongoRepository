@@ -4,6 +4,7 @@ using MongoRepository.Interface;
 using Moq;
 using System.Linq.Expressions;
 using MongoRepository.Attributes;
+using Xunit;
 
 namespace Tests;
 

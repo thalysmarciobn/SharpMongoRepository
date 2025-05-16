@@ -1,0 +1,101 @@
+name: .NET CI and Publish
+
+on:
+  release:
+    types: [created]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  PACKAGE_NAME: 'MongoRepository'
+  SOLUTION_FILE: 'MongoRepository.sln'
+  PROJECT_PATH: 'Core/MongoRepository.csproj'
+  TEST_PROJECT_PATH: 'Tests/Tests.csproj'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+      
+    - name: Build solution
+      run: dotnet build ${{ env.SOLUTION_FILE }} --no-restore --configuration Release
+      
+    - name: Run tests
+      run: |
+        dotnet test ${{ env.TEST_PROJECT_PATH }} \
+          --no-build \
+          --configuration Release \
+          --logger "trx" \
+          --collect:"XPlat Code Coverage" \
+          /p:CollectCoverage=true
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: '**/TestResults/*.trx'
+
+    - name: Upload coverage report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-coverage
+        path: '**/coverage.cobertura.xml'
+
+  publish-package:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+    - name: Build project
+      run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+
+    - name: Check if DLL exists
+      run: ls -la Core/bin/Release/net9.0 || echo "DLL not found"
+
+    - name: Create artifacts directory
+      run: mkdir -p ./artifacts
+      
+    - name: Pack the library
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        dotnet pack ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          --no-restore \
+          -p:Version=$VERSION \
+          -p:PackageId=${{ env.PACKAGE_NAME }} \
+          --output ./artifacts
+          
+    - name: Publish to GitHub Packages
+      run: dotnet nuget push "./artifacts/*.nupkg" --api-key ${{ secrets.GITHUB_TOKEN }} --source "https://nuget.pkg.github.com/thalysmarciobn/index.json"
+      
+      
+    - name: Upload package artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.PACKAGE_NAME }}-nupkg
+        path: ./artifacts/*.nupkg
