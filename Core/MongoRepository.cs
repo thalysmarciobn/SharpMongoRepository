@@ -59,7 +59,14 @@ namespace MongoRepository;
 /// </remarks>
 public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> where TDocument : IDocument
 {
-    private readonly IMongoCollection<TDocument> _collection;
+    private readonly string _connectionString;
+    private readonly string _databaseName;
+    private readonly string _collectionName;
+    
+    private readonly Lazy<IMongoClient> _lazyClient;
+    private readonly Lazy<IMongoCollection<TDocument>> _lazyCollection;
+
+    private readonly MongoRepositoryOptions<TDocument>? _options;
 
     /// <summary>
     /// Initializes a new MongoDB repository instance.
@@ -72,33 +79,118 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
     /// </exception>
     public MongoRepository(string connectionString, string databaseName, MongoRepositoryOptions<TDocument>? options)
     {
-        var database = new MongoClient(connectionString).GetDatabase(databaseName);
-        var collectionName = GetCollectionName(typeof(TDocument)) ?? throw new MongoRepositoryException("Collection name not specified.");
-        _collection = database.GetCollection<TDocument>(collectionName) ??
-                      throw new MongoRepositoryException("Failed to establish connection.");
+        _connectionString = connectionString;
+        _databaseName = databaseName;
         
-        if (options is not null)
+        _collectionName = GetCollectionName(typeof(TDocument)) ?? throw new MongoRepositoryException("Collection name not specified.");
+        
+        _lazyClient = new Lazy<IMongoClient>(CreateMongoClient, LazyThreadSafetyMode.ExecutionAndPublication);
+        
+        _lazyCollection = new Lazy<IMongoCollection<TDocument>>(InitializeCollection, LazyThreadSafetyMode.ExecutionAndPublication);
+
+        _options = options;
+    }
+    
+    /// <summary>
+    /// Creates and returns a new MongoDB client instance using the configured connection string.
+    /// </summary>
+    /// <returns>A new instance of <see cref="IMongoClient"/>.</returns>
+    /// <exception cref="MongoRepositoryException">
+    /// Thrown when the MongoDB client cannot be created. The exception contains:
+    /// <list type="bullet">
+    ///   <item><description>Original exception as inner exception</description></item>
+    ///   <item><description>Detailed error message about the failure</description></item>
+    /// </list>
+    /// </exception>
+    /// <remarks>
+    /// This method handles the following scenarios:
+    /// <list type="bullet">
+    ///   <item><description>Valid connection string format</description></item>
+    ///   <item><description>Network connectivity to MongoDB server</description></item>
+    ///   <item><description>Authentication if required</description></item>
+    /// </list>
+    /// The client instance is configured with default settings from the connection string.
+    /// </remarks>
+    private IMongoClient CreateMongoClient()
+    {
+        try
         {
-            CreateIndexes(options);
+            return new MongoClient(_connectionString);
+        }
+        catch (Exception ex)
+        {
+            throw new MongoRepositoryException("Failed to create MongoDB client.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Initializes and returns a MongoDB collection instance, optionally creating indexes if configured.
+    /// </summary>
+    /// <returns>An <see cref="IMongoCollection{TDocument}"/> instance for the specified document type.</returns>
+    /// <exception cref="MongoRepositoryException">
+    /// Thrown when:
+    /// <list type="bullet">
+    ///   <item><description>The collection cannot be accessed</description></item>
+    ///   <item><description>Index creation fails</description></item>
+    /// </list>
+    /// The exception contains the original error details.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs the following operations:
+    /// <list type="number">
+    ///   <item><description>Gets the database instance from the MongoDB client</description></item>
+    ///   <item><description>Retrieves the specified collection</description></item>
+    ///   <item><description>Creates indexes if <see cref="_options"/> contains index definitions</description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The collection name is determined by the <see cref="BsonCollectionAttribute"/> on the document type.
+    /// </para>
+    /// <para>
+    /// Index creation is skipped if:
+    /// <list type="bullet">
+    ///   <item><description>No options are provided (<see cref="_options"/> is null)</description></item>
+    ///   <item><description>The indexes already exist in the collection</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    private IMongoCollection<TDocument> InitializeCollection()
+    {
+        try
+        {
+            var collection = _lazyClient.Value.GetDatabase(_databaseName).GetCollection<TDocument>(_collectionName) ??
+                             throw new MongoRepositoryException($"Failed to get collection '{_collectionName}'.");
+
+            if (_options is not null)
+            {
+                CreateIndexes(collection, _options);
+            }
+
+            return collection;
+        }
+        catch (Exception ex)
+        {
+            throw new MongoRepositoryException($"Failed to initialize collection '{_collectionName}'.", ex);
         }
     }
 
     /// <inheritdoc/>
     public IFindFluent<TDocument, TDocument> Find(FilterDefinition<TDocument> filter)
     {
-        return _collection.Find(filter);
+        return _lazyCollection.Value.Find(filter);
     }
 
     /// <inheritdoc/>
     public IQueryable<TDocument> AsQueryable()
     {
-        return _collection.AsQueryable();
+        return _lazyCollection.Value.AsQueryable();
     }
 
     /// <inheritdoc/>
     public IEnumerable<TDocument> FilterBy(Expression<Func<TDocument, bool>> filterExpression)
     {
-        return _collection.Find(filterExpression).ToEnumerable();
+        return _lazyCollection.Value.Find(filterExpression).ToEnumerable();
     }
 
     /// <inheritdoc/>
@@ -106,19 +198,19 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
         Expression<Func<TDocument, bool>> filterExpression,
         Expression<Func<TDocument, TProjected>> projectionExpression)
     {
-        return _collection.Find(filterExpression).Project(projectionExpression).ToEnumerable();
+        return _lazyCollection.Value.Find(filterExpression).Project(projectionExpression).ToEnumerable();
     }
 
     /// <inheritdoc/>
     public TDocument FindOne(Expression<Func<TDocument, bool>> filterExpression)
     {
-        return _collection.Find(filterExpression).FirstOrDefault();
+        return _lazyCollection.Value.Find(filterExpression).FirstOrDefault();
     }
 
     /// <inheritdoc/>
     public async Task<TDocument?> FindOneAsync(Expression<Func<TDocument, bool>> filterExpression)
     {
-        return await _collection.Find(filterExpression).FirstOrDefaultAsync();
+        return await _lazyCollection.Value.Find(filterExpression).FirstOrDefaultAsync();
     }
 
     /// <inheritdoc/>
@@ -126,7 +218,7 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
     {
         var objectId = new ObjectId(id);
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, objectId);
-        return _collection.Find(filter).SingleOrDefault();
+        return _lazyCollection.Value.Find(filter).SingleOrDefault();
     }
 
     /// <inheritdoc/>
@@ -134,7 +226,7 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
     {
         var objectId = new ObjectId(id);
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, objectId);
-        var find = await _collection.FindAsync(filter);
+        var find = await _lazyCollection.Value.FindAsync(filter);
         return await find.SingleOrDefaultAsync();
     }
 
@@ -144,65 +236,65 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
         if (document.Id == ObjectId.Empty)
             document.Id = ObjectId.GenerateNewId();
 
-        _collection.InsertOne(document);
+        _lazyCollection.Value.InsertOne(document);
     }
 
     /// <inheritdoc/>
     public async Task InsertOneAsync(TDocument document)
     {
-        await _collection.InsertOneAsync(document);
+        await _lazyCollection.Value.InsertOneAsync(document);
     }
 
     /// <inheritdoc/>
     public void InsertMany(ICollection<TDocument> documents)
     {
-        _collection.InsertMany(documents);
+        _lazyCollection.Value.InsertMany(documents);
     }
 
     /// <inheritdoc/>
     public async Task<long> AsyncCount(Expression<Func<TDocument, bool>> filterExpression)
     {
         var filter = Builders<TDocument>.Filter.Where(filterExpression);
-        return await _collection.CountDocumentsAsync(filter);
+        return await _lazyCollection.Value.CountDocumentsAsync(filter);
     }
 
     /// <inheritdoc/>
     public long Count(Expression<Func<TDocument, bool>> filterExpression)
     {
         var filter = Builders<TDocument>.Filter.Where(filterExpression);
-        return _collection.CountDocuments(filter);
+        return _lazyCollection.Value.CountDocuments(filter);
     }
 
     /// <inheritdoc/>
     public async Task InsertManyAsync(ICollection<TDocument> documents)
     {
-        await _collection.InsertManyAsync(documents);
+        await _lazyCollection.Value.InsertManyAsync(documents);
     }
 
     /// <inheritdoc/>
     public void ReplaceOne(TDocument document)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-        _collection.FindOneAndReplace(filter, document);
+        _lazyCollection.Value.FindOneAndReplace(filter, document);
     }
 
     /// <inheritdoc/>
-    public async Task ReplaceOneAsync(TDocument document)
+    public async Task<TDocument> ReplaceOneAsync(TDocument document)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-        await _collection.FindOneAndReplaceAsync(filter, document);
+        return await _lazyCollection.Value.FindOneAndReplaceAsync(filter, document);
     }
 
     /// <inheritdoc/>
     public void DeleteOne(Expression<Func<TDocument, bool>> filterExpression)
     {
-        _collection.FindOneAndDelete(filterExpression);
+        _lazyCollection.Value.FindOneAndDelete(filterExpression);
     }
 
     /// <inheritdoc/>
     public async Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression)
     {
-        await _collection.FindOneAndDeleteAsync(filterExpression);
+        await _lazyCollection.Value.FindOneAndDeleteAsync(filterExpression);
     }
 
     /// <inheritdoc/>
@@ -210,7 +302,7 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
     {
         var objectId = new ObjectId(id);
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, objectId);
-        _collection.FindOneAndDelete(filter);
+        _lazyCollection.Value.FindOneAndDelete(filter);
     }
 
     /// <inheritdoc/>
@@ -218,19 +310,19 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
     {
         var objectId = new ObjectId(id);
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, objectId);
-        await _collection.FindOneAndDeleteAsync(filter);
+        await _lazyCollection.Value.FindOneAndDeleteAsync(filter);
     }
 
     /// <inheritdoc/>
     public void DeleteMany(Expression<Func<TDocument, bool>> filterExpression)
     {
-        _collection.DeleteMany(filterExpression);
+        _lazyCollection.Value.DeleteMany(filterExpression);
     }
 
     /// <inheritdoc/>
     public async Task DeleteManyAsync(Expression<Func<TDocument, bool>> filterExpression)
     {
-        await _collection.DeleteManyAsync(filterExpression);
+        await _lazyCollection.Value.DeleteManyAsync(filterExpression);
     }
 
     /// <summary>
@@ -251,16 +343,16 @@ public sealed class MongoRepository<TDocument> : IMongoRepository<TDocument> whe
     /// <exception cref="MongoRepositoryException">
     /// Thrown when an index name is not provided.
     /// </exception>
-    private void CreateIndexes(MongoRepositoryOptions<TDocument> options)
+    private void CreateIndexes(IMongoCollection<TDocument> collection, MongoRepositoryOptions<TDocument> options)
     {
-        var existingIndexNames = _collection.Indexes.List()
+        var existingIndexNames = collection.Indexes.List()
             .ToList()
             .Select(indexInfo => indexInfo["name"].AsString)
             .ToHashSet();
 
         foreach (var indexModel in from index in options.Indexes let indexName = index.Options.Name ?? throw new MongoRepositoryException("Index name must be provided.") where !existingIndexNames.Contains(indexName) select new CreateIndexModel<TDocument>(index.Keys, index.Options))
         {
-            _collection.Indexes.CreateOne(indexModel);
+            collection.Indexes.CreateOne(indexModel);
         }
     }
 }

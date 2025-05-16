@@ -123,7 +123,7 @@ public interface IMongoRepository<TDocument> where TDocument : IDocument
     /// </summary>
     /// <param name="document">The replacement document.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task ReplaceOneAsync(TDocument document);
+    Task<TDocument> ReplaceOneAsync(TDocument document);
 
     /// <summary>
     /// Deletes a single document matching the filter expression.

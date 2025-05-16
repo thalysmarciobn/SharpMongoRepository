@@ -11,7 +11,7 @@ namespace MongoRepository.Interface;
 /// This interface ensures all documents have a consistent ID field format
 /// and can be properly serialized/deserialized by the MongoDB driver.
 /// </remarks>
-public class IDocument
+public interface IDocument
 {
     /// <summary>
     /// Gets or sets the unique identifier for the MongoDB document.
