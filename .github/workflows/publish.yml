@@ -1,10 +1,6 @@
 name: .NET CI and Publish
 
 on:
-  push:
-    branches: [ "test" ]
-  pull_request:
-    branches: [ "test" ]
   release:
     types: [created]
 
