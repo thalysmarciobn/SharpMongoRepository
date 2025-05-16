@@ -17,10 +17,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Using Include="Xunit"/>
-    </ItemGroup>
-
-    <ItemGroup>
       <ProjectReference Include="..\Core\MongoRepository.csproj" />
     </ItemGroup>
 
