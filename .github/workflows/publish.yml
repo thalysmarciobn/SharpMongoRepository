@@ -1,10 +1,10 @@
-name: Publish
+name: .NET CI and Publish
 
 on:
   push:
-    branches: [ "test" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "test" ]
+    branches: [ "main" ]
   release:
     types: [created]
 
@@ -13,6 +13,7 @@ env:
   PACKAGE_NAME: 'MongoRepository'
   SOLUTION_FILE: 'MongoRepository.sln'
   PROJECT_PATH: 'Core/MongoRepository.csproj'
+  TEST_PROJECT_PATH: 'Tests/Tests/Tests.csproj'
 
 jobs:
   build-and-test:
@@ -33,7 +34,7 @@ jobs:
       run: dotnet build ${{ env.SOLUTION_FILE }} --no-restore --configuration Release
       
     - name: Run tests
-      run: dotnet test ${{ env.SOLUTION_FILE }} --no-build --verbosity normal
+      run: dotnet test ${{ env.TEST_PROJECT_PATH }} --no-build --verbosity normal
 
   publish-package:
     needs: build-and-test
@@ -56,7 +57,6 @@ jobs:
       
     - name: Pack the library
       run: |
-        # Remove 'v' prefix from tag if present
         VERSION=${GITHUB_REF#refs/tags/v}
         dotnet pack ${{ env.PROJECT_PATH }} \
           --configuration Release \
