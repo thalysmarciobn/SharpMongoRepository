@@ -34,7 +34,20 @@ jobs:
       run: dotnet build ${{ env.SOLUTION_FILE }} --no-restore --configuration Release
       
     - name: Run tests
-      run: dotnet test ${{ env.TEST_PROJECT_PATH }} --no-build --verbosity normal
+      run: dotnet test ${{ env.TEST_PROJECT_PATH }} --no-build --configuration Release --verbosity normal --logger trx --collect:"XPlat Code Coverage"
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: '**/TestResults/*.trx'
+
+    - name: Upload coverage report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-coverage
+        path: '**/coverage.cobertura.xml'
 
   publish-package:
     needs: build-and-test
