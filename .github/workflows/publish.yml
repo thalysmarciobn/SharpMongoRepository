@@ -77,27 +77,28 @@ jobs:
     - name: Build project
       run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
 
+    - name: Check if DLL exists
+      run: ls -la Core/bin/Release/net9.0 || echo "DLL not found"
+
     - name: Create artifacts directory
       run: mkdir -p ./artifacts
       
     - name: Pack the library
-      if: startsWith(github.ref, 'refs/tags/v')
       run: |
         VERSION=${GITHUB_REF#refs/tags/v}
         dotnet pack ${{ env.PROJECT_PATH }} \
           --configuration Release \
+          --no-restore \
           -p:Version=$VERSION \
           -p:PackageId=${{ env.PACKAGE_NAME }} \
           --output ./artifacts
       
     - name: Publish to GitHub Packages
-      if: startsWith(github.ref, 'refs/tags/v')
       run: dotnet nuget push ./artifacts/*.nupkg \
         --api-key ${{ secrets.GITHUB_TOKEN }} \
         --source https://nuget.pkg.github.com/thalysmarciobn/index.json
       
     - name: Upload package artifact
-      if: startsWith(github.ref, 'refs/tags/v')
       uses: actions/upload-artifact@v4
       with:
         name: ${{ env.PACKAGE_NAME }}-nupkg
