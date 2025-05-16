@@ -70,12 +70,13 @@ jobs:
       
     - name: Pack the library
       run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
+        VERSION=${GITHUB_REF#refs/tags/}
         dotnet pack ${{ env.PROJECT_PATH }} \
           --configuration Release \
           -p:Version=$VERSION \
           -p:PackageId=${{ env.PACKAGE_NAME }} \
           --output ./artifacts
+    
       
     - name: Publish to GitHub Packages
       run: dotnet nuget push ./artifacts/*.nupkg \
