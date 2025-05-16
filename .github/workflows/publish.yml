@@ -13,7 +13,7 @@ env:
   PACKAGE_NAME: 'MongoRepository'
   SOLUTION_FILE: 'MongoRepository.sln'
   PROJECT_PATH: 'Core/MongoRepository.csproj'
-  TEST_PROJECT_PATH: 'Tests/Tests/Tests.csproj'
+  TEST_PROJECT_PATH: 'Tests/Tests.csproj'
 
 jobs:
   build-and-test:
