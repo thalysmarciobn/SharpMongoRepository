@@ -1,31 +1,35 @@
-using MongoRepository.Interface;
+using SharpMongoRepository.Interface;
 
-namespace MongoRepository.Configuration;
+namespace SharpMongoRepository.Configuration;
 
 /// <summary>
-/// Represents configuration options for a MongoDB repository, including index definitions.
+///     Represents configuration options for a MongoDB repository, including index definitions.
 /// </summary>
-/// <typeparam name="TDocument">The document type that implements <see cref="IDocument"/>.</typeparam>
+/// <typeparam name="TDocument">The document type that implements <see cref="IDocument" />.</typeparam>
 /// <remarks>
-/// This record type provides a strongly-typed way to configure MongoDB repository settings,
-/// particularly for index management during application startup or repository initialization.
-/// The <see cref="Indexes"/> property is marked as required to ensure explicit index configuration.
+///     This record type provides a strongly-typed way to configure MongoDB repository settings,
+///     particularly for index management during application startup or repository initialization.
+///     The <see cref="Indexes" /> property is marked as required to ensure explicit index configuration.
 /// </remarks>
 public record MongoRepositoryOptions<TDocument> where TDocument : IDocument
 {
     /// <summary>
-    /// Gets the collection of index definitions to be created for the document type.
+    ///     Gets the collection of index definitions to be created for the document type.
     /// </summary>
     /// <value>
-    /// A list of <see cref="MongoIndex{TDocument}"/> objects, each defining:
-    /// <list type="bullet">
-    ///   <item><description>The indexed fields and their sort order</description></item>
-    ///   <item><description>Additional index options (unique, TTL, etc.)</description></item>
-    /// </list>
+    ///     A list of <see cref="MongoIndex{TDocument}" /> objects, each defining:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <description>The indexed fields and their sort order</description>
+    ///         </item>
+    ///         <item>
+    ///             <description>Additional index options (unique, TTL, etc.)</description>
+    ///         </item>
+    ///     </list>
     /// </value>
     /// <example>
-    /// Example configuration:
-    /// <code>
+    ///     Example configuration:
+    ///     <code>
     /// new MongoRepositoryOptions&lt;User&gt;
     /// {
     ///     Indexes = new List&lt;MongoIndex&lt;User&gt;&gt;
@@ -39,5 +43,5 @@ public record MongoRepositoryOptions<TDocument> where TDocument : IDocument
     /// }
     /// </code>
     /// </example>
-    public required List<MongoIndex<TDocument>> Indexes { get; init; }
+    public required List<MongoIndex<TDocument>>? Indexes { get; init; }
 }
