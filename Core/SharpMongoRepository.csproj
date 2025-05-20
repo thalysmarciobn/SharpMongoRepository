@@ -5,7 +5,7 @@
         <Nullable>enable</Nullable>
 
         <PackageId>SharpMongoRepository</PackageId>
-        <Version>0.0.2</Version>
+        <Version>0.0.3</Version>
         <Authors>ThalysMarcioBN</Authors>
         <Company>ThalysMarcioBN</Company>
         <Description>A MongoDB repository implementation for .NET</Description>
