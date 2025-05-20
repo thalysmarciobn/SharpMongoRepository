@@ -32,18 +32,16 @@ public record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary) 
 ## Dependency Injection Setup
 
 ```csharp
-var builder = WebApplication.CreateBuilder(args);
+services.AddScoped<IMongoRepository<T>>(provider =>
+{GetRequiredService<IOptions<MongoSettings>>().Value;
 
-// Load settings from appsettings.json
-builder.Services.Configure<MongoSettings>(builder.Configuration.GetSection("Mongo"));
+    var options = new MongoRepositoryOptions<WeatherForecast>
+    {
+        Indexes = indexes
+    };
 
-// Register repository
-builder.Services.AddMongoRepository<WeatherForecast>([
-    new MongoIndex<WeatherForecast> {
-        Keys = Builders<WeatherForecast>.IndexKeys.Ascending(x => x.Date),
-        Options = new CreateIndexOptions { Unique = true }
-    }
-]);
+    return new MongoRepository<WeatherForecast>(settings.ConnectionString, settings.Database, options);
+});
 ```
 
 ---
