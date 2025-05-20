@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <PackageId>MongoRepository</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>ThalysMarcioBN</Authors>
+        <Company>ThalysMarcioBN</Company>
+        <Description>A MongoDB repository implementation for .NET</Description>
+        <PackageProjectUrl>https://github.com/thalysmarciobn/MongoRepository</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/thalysmarciobn/MongoRepository.git</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageTags>mongodb repository pattern net</PackageTags>
+
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MongoDB.Bson" Version="3.4.0" />
+        <PackageReference Include="MongoDB.Driver" Version="3.4.0" />
+    </ItemGroup>
+</Project>
