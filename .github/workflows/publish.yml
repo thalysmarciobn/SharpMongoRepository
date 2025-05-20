@@ -6,9 +6,9 @@ on:
 
 env:
   DOTNET_VERSION: '9.0.x'
-  PACKAGE_NAME: 'MongoRepository'
-  SOLUTION_FILE: 'MongoRepository.sln'
-  PROJECT_PATH: 'Core/MongoRepository.csproj'
+  PACKAGE_NAME: 'SharpMongoRepository'
+  SOLUTION_FILE: 'SharpMongoRepository.sln'
+  PROJECT_PATH: 'Core/SharpMongoRepository.csproj'
   TEST_PROJECT_PATH: 'Tests/Tests.csproj'
 
 jobs:

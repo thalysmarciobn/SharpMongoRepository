@@ -1,9 +1,9 @@
-﻿using MongoDB.Bson;
+﻿using System.Linq.Expressions;
+using MongoDB.Bson;
 using MongoDB.Driver;
-using MongoRepository.Interface;
 using Moq;
-using System.Linq.Expressions;
-using MongoRepository.Attributes;
+using SharpMongoRepository.Attributes;
+using SharpMongoRepository.Interface;
 using Xunit;
 
 namespace Tests;
@@ -11,21 +11,21 @@ namespace Tests;
 [BsonCollection("test_entities")]
 public class TestEntity : IDocument
 {
-    public ObjectId Id { get; set; }
     public required string Name { get; init; }
     public int Value { get; init; }
+    public ObjectId Id { get; set; }
 }
 
 public class MongoRepositoryTests
 {
     private readonly Mock<IMongoRepository<TestEntity>> _mockRepository;
-    private readonly TestEntity _testEntity;
     private readonly List<TestEntity> _testEntities;
+    private readonly TestEntity _testEntity;
 
     public MongoRepositoryTests()
     {
         _mockRepository = new Mock<IMongoRepository<TestEntity>>();
-        
+
         _testEntity = new TestEntity
         {
             Id = ObjectId.GenerateNewId(),
@@ -46,9 +46,9 @@ public class MongoRepositoryTests
     {
         var filter = Builders<TestEntity>.Filter.Eq(x => x.Id, _testEntity.Id);
         var mockFindFluent = new Mock<IFindFluent<TestEntity, TestEntity>>();
-        
+
         _mockRepository.Setup(x => x.Find(It.IsAny<FilterDefinition<TestEntity>>()))
-                      .Returns(mockFindFluent.Object);
+            .Returns(mockFindFluent.Object);
 
         var result = _mockRepository.Object.Find(filter);
 
@@ -73,9 +73,9 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
         var expected = _testEntities.Where(x => x.Value > 150).ToList();
-        
+
         _mockRepository.Setup(x => x.FilterBy(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .Returns(expected);
+            .Returns(expected);
 
         var result = _mockRepository.Object.FilterBy(filter);
 
@@ -89,13 +89,13 @@ public class MongoRepositoryTests
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
         Expression<Func<TestEntity, string>> projection = x => x.Name;
         var expected = _testEntities.Where(x => x.Value > 150).Select(x => x.Name).ToList();
-        
+
         _mockRepository.Setup(x => x.FilterBy(It.IsAny<Expression<Func<TestEntity, bool>>>(),
-                                      It.IsAny<Expression<Func<TestEntity, string>>>()))
-                      .Returns(expected);
+                It.IsAny<Expression<Func<TestEntity, string>>>()))
+            .Returns(expected);
 
         var result = _mockRepository.Object.FilterBy(filter, projection);
-        
+
         Assert.NotNull(result);
         var enumerable = result as string[] ?? result.ToArray();
         Assert.Equal(2, enumerable.Length);
@@ -108,7 +108,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == _testEntity.Id;
         _mockRepository.Setup(x => x.FindOne(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .Returns(_testEntity);
+            .Returns(_testEntity);
 
         var result = _mockRepository.Object.FindOne(filter);
 
@@ -122,7 +122,7 @@ public class MongoRepositoryTests
     {
         var id = _testEntity.Id.ToString();
         _mockRepository.Setup(x => x.FindById(It.IsAny<string>()))
-                      .Returns(_testEntity);
+            .Returns(_testEntity);
 
         var result = _mockRepository.Object.FindById(id);
 
@@ -156,7 +156,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
         _mockRepository.Setup(x => x.Count(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .Returns(2);
+            .Returns(2);
 
         var result = _mockRepository.Object.Count(filter);
 
@@ -212,7 +212,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == _testEntity.Id;
         _mockRepository.Setup(x => x.FindOneAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .ReturnsAsync(_testEntity);
+            .ReturnsAsync(_testEntity);
 
         var result = await _mockRepository.Object.FindOneAsync(filter);
 
@@ -226,7 +226,7 @@ public class MongoRepositoryTests
     {
         var id = _testEntity.Id.ToString();
         _mockRepository.Setup(x => x.FindByIdAsync(It.IsAny<string>()))
-                      .ReturnsAsync(_testEntity);
+            .ReturnsAsync(_testEntity);
 
         var result = await _mockRepository.Object.FindByIdAsync(id);
 
@@ -239,7 +239,7 @@ public class MongoRepositoryTests
     public async Task Should_insert_single_document_async()
     {
         _mockRepository.Setup(x => x.InsertOneAsync(It.IsAny<TestEntity>()))
-                      .Returns(Task.CompletedTask);
+            .Returns(Task.CompletedTask);
 
         await _mockRepository.Object.InsertOneAsync(_testEntity);
 
@@ -250,7 +250,7 @@ public class MongoRepositoryTests
     public async Task Should_insert_multiple_documents_async()
     {
         _mockRepository.Setup(x => x.InsertManyAsync(It.IsAny<ICollection<TestEntity>>()))
-                      .Returns(Task.CompletedTask);
+            .Returns(Task.CompletedTask);
 
         await _mockRepository.Object.InsertManyAsync(_testEntities);
 
@@ -262,7 +262,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
         _mockRepository.Setup(x => x.AsyncCount(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .ReturnsAsync(2);
+            .ReturnsAsync(2);
 
         var result = await _mockRepository.Object.AsyncCount(filter);
 
@@ -275,7 +275,7 @@ public class MongoRepositoryTests
     {
         var updatedEntity = new TestEntity { Id = _testEntity.Id, Name = "Updated" };
         _mockRepository.Setup(x => x.ReplaceOneAsync(It.IsAny<TestEntity>()))
-                      .ReturnsAsync(updatedEntity);
+            .ReturnsAsync(updatedEntity);
 
         var result = await _mockRepository.Object.ReplaceOneAsync(updatedEntity);
 
@@ -288,7 +288,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == _testEntity.Id;
         _mockRepository.Setup(x => x.DeleteOneAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .Returns(Task.CompletedTask);
+            .Returns(Task.CompletedTask);
 
         await _mockRepository.Object.DeleteOneAsync(filter);
 
@@ -300,7 +300,7 @@ public class MongoRepositoryTests
     {
         var id = _testEntity.Id.ToString();
         _mockRepository.Setup(x => x.DeleteByIdAsync(It.IsAny<string>()))
-                      .Returns(Task.CompletedTask);
+            .Returns(Task.CompletedTask);
 
         await _mockRepository.Object.DeleteByIdAsync(id);
 
@@ -312,7 +312,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
         _mockRepository.Setup(x => x.DeleteManyAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .Returns(Task.CompletedTask);
+            .Returns(Task.CompletedTask);
 
         await _mockRepository.Object.DeleteManyAsync(filter);
 
@@ -324,7 +324,7 @@ public class MongoRepositoryTests
     {
         var id = ObjectId.GenerateNewId().ToString();
         _mockRepository.Setup(x => x.FindById(It.IsAny<string>()))
-                      .Returns((TestEntity)null!);
+            .Returns((TestEntity)null!);
 
         var result = _mockRepository.Object.FindById(id);
 
@@ -337,7 +337,7 @@ public class MongoRepositoryTests
     {
         var id = ObjectId.GenerateNewId().ToString();
         _mockRepository.Setup(x => x.FindByIdAsync(It.IsAny<string>()))
-                      .ReturnsAsync((TestEntity)null!);
+            .ReturnsAsync((TestEntity)null!);
 
         var result = await _mockRepository.Object.FindByIdAsync(id);
 
@@ -350,7 +350,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == ObjectId.GenerateNewId();
         _mockRepository.Setup(x => x.FindOne(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .Returns((TestEntity)null!);
+            .Returns((TestEntity)null!);
 
         var result = _mockRepository.Object.FindOne(filter);
 
@@ -363,7 +363,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == ObjectId.GenerateNewId();
         _mockRepository.Setup(x => x.FindOneAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .ReturnsAsync((TestEntity)null!);
+            .ReturnsAsync((TestEntity)null!);
 
         var result = await _mockRepository.Object.FindOneAsync(filter);
 
@@ -376,7 +376,7 @@ public class MongoRepositoryTests
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 1000;
         _mockRepository.Setup(x => x.FilterBy(It.IsAny<Expression<Func<TestEntity, bool>>>()))
-                      .Returns(new List<TestEntity>());
+            .Returns(new List<TestEntity>());
 
         var result = _mockRepository.Object.FilterBy(filter);
 
