@@ -1,4 +1,8 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.IdGenerators;
 using SharpMongoRepository;
 using SharpMongoRepository.Configuration;
 using SharpMongoRepository.Interface;
@@ -7,19 +11,33 @@ namespace API.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddMongoRepository<T>(this IServiceCollection services,
-        List<MongoIndex<T>>? indexes) where T : class, IDocument
+    public static IServiceCollection AddMongoRepository<T, TKey>(
+        this IServiceCollection services,
+        List<MongoIndex<T, TKey>>? indexes = null,
+        Action<MongoRepositoryOptions<T, TKey>>? configureOptions = null)
+        where T : class, IDocument<TKey>
     {
-        services.AddScoped<IMongoRepository<T>>(provider =>
+        if (services == null)
         {
-            var settings = provider.GetRequiredService<IOptions<MongoSettings>>().Value;
+            throw new ArgumentNullException(nameof(services));
+        }
 
-            var options = new MongoRepositoryOptions<T>
+        services.AddScoped<IMongoRepository<T, TKey>>(provider =>
+        {
+            var settings = provider.GetRequiredService<IOptions<MongoSettings>>().Value
+                ?? throw new InvalidOperationException("MongoDB settings not configured");
+
+            var options = new MongoRepositoryOptions<T, TKey>
             {
                 Indexes = indexes
             };
 
-            return new MongoRepository<T>(settings.ConnectionString, settings.Database, options);
+            configureOptions?.Invoke(options);
+
+            return new MongoRepository<T, TKey>(
+                settings.ConnectionString,
+                settings.Database,
+                options);
         });
 
         return services;

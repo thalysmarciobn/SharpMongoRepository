@@ -11,7 +11,7 @@ namespace SharpMongoRepository.Interface;
 ///     This interface ensures all documents have a consistent ID field format
 ///     and can be properly serialized/deserialized by the MongoDB driver.
 /// </remarks>
-public interface IDocument
+public interface IDocument<T>
 {
     /// <summary>
     ///     Gets or sets the unique identifier for the MongoDB document.
@@ -35,6 +35,5 @@ public interface IDocument
     ///     The ObjectId type provides document uniqueness and includes timestamp information.
     /// </remarks>
     [BsonId]
-    [BsonRepresentation(BsonType.String)]
-    public ObjectId Id { get; set; }
+    public T? Id { get; set; }
 }

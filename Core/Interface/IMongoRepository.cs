@@ -4,168 +4,186 @@ using MongoDB.Driver;
 namespace SharpMongoRepository.Interface;
 
 /// <summary>
-///     Represents a generic repository interface for MongoDB operations.
+/// Representa uma interface genérica de repositório para operações com MongoDB.
 /// </summary>
-/// <typeparam name="TDocument">The document type that implements <see cref="IDocument" />.</typeparam>
+/// <typeparam name="TDocument">Tipo do documento que implementa <see cref="IDocument"/>.</typeparam>
 /// <remarks>
-///     This interface provides synchronous and asynchronous CRUD operations for MongoDB,
-///     with support for queries, projections, and bulk operations.
+/// Esta interface fornece operações síncronas e assíncronas de CRUD para MongoDB,
+/// com suporte a filtragem, projeção, contagem e execução de transações.
 /// </remarks>
-public interface IMongoRepository<TDocument> where TDocument : IDocument
+public interface IMongoRepository<TDocument, TKey> where TDocument : IDocument<TKey>
 {
     /// <summary>
-    ///     Finds documents matching the specified filter.
+    /// Encontra documentos que correspondem à definição de filtro do MongoDB especificada.
     /// </summary>
-    /// <param name="filter">The MongoDB filter definition.</param>
-    /// <returns>An <see cref="IFindFluent{TDocument, TDocument}" /> for chaining additional operations.</returns>
+    /// <param name="filter">A definição de filtro do MongoDB.</param>
+    /// <returns>Um <see cref="IFindFluent{TDocument, TDocument}"/> para operações adicionais de consulta.</returns>
     IFindFluent<TDocument, TDocument> Find(FilterDefinition<TDocument> filter);
 
     /// <summary>
-    ///     Provides LINQ query support for the document collection.
+    /// Fornece capacidades de consulta LINQ para a coleção de documentos.
     /// </summary>
-    /// <returns>An <see cref="IQueryable{T}" /> for the document type.</returns>
+    /// <returns>Um <see cref="IQueryable{TDocument}"/> para realizar consultas LINQ.</returns>
     IQueryable<TDocument?> AsQueryable();
 
     /// <summary>
-    ///     Filters documents by a predicate expression.
+    /// Filtra documentos usando a expressão de predicado especificada.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <returns>An enumerable of matching documents.</returns>
+    /// <param name="filterExpression">Expressão LINQ utilizada para filtrar os documentos.</param>
+    /// <returns>Uma coleção de documentos que correspondem ao filtro.</returns>
     IEnumerable<TDocument?> FilterBy(Expression<Func<TDocument, bool>> filterExpression);
 
     /// <summary>
-    ///     Filters and projects documents using specified expressions.
+    /// Filtra e projeta documentos utilizando as expressões fornecidas.
     /// </summary>
-    /// <typeparam name="TProjected">The projection result type.</typeparam>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <param name="projectionExpression">The LINQ expression to project documents.</param>
-    /// <returns>An enumerable of projected results.</returns>
+    /// <typeparam name="TProjected">Tipo do resultado projetado.</typeparam>
+    /// <param name="filterExpression">Expressão LINQ usada para filtrar os documentos.</param>
+    /// <param name="projectionExpression">Expressão LINQ usada para projetar os documentos.</param>
+    /// <returns>Uma coleção de resultados projetados.</returns>
     IEnumerable<TProjected> FilterBy<TProjected>(
         Expression<Func<TDocument, bool>> filterExpression,
         Expression<Func<TDocument, TProjected>> projectionExpression);
 
     /// <summary>
-    ///     Returns all documents in the collection asynchronously.
+    /// Recupera assincronamente todos os documentos da coleção.
     /// </summary>
+    /// <returns>Uma tarefa que retorna um cursor assíncrono para iterar sobre os documentos.</returns>
     Task<IAsyncCursor<TDocument>> AllAsync();
 
     /// <summary>
-    ///     Finds a single document matching the filter expression.
+    /// Encontra um único documento que corresponda à expressão fornecida.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <returns>The matching document or null if not found.</returns>
+    /// <param name="filterExpression">Expressão LINQ para filtrar o documento.</param>
+    /// <returns>O documento correspondente, ou null se não encontrado.</returns>
     TDocument? FindOne(Expression<Func<TDocument, bool>> filterExpression);
 
     /// <summary>
-    ///     Asynchronously finds a single document matching the filter expression.
+    /// Encontra assincronamente um único documento que corresponda à expressão fornecida.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <returns>A task representing the operation, containing the matching document or null if not found.</returns>
+    /// <param name="filterExpression">Expressão LINQ para filtrar o documento.</param>
+    /// <returns>Uma tarefa que retorna o documento correspondente ou null.</returns>
     Task<TDocument?> FindOneAsync(Expression<Func<TDocument, bool>> filterExpression);
 
     /// <summary>
-    ///     Finds a document by its unique identifier.
+    /// Encontra um documento pelo seu identificador único.
     /// </summary>
-    /// <param name="id">The string representation of the document's ObjectId.</param>
-    /// <returns>The matching document or null if not found.</returns>
-    TDocument? FindById(string id);
+    /// <param name="id">Representação em string do ObjectId do documento.</param>
+    /// <returns>O documento se encontrado; caso contrário, null.</returns>
+    TDocument? FindById(TKey id);
 
     /// <summary>
-    ///     Asynchronously finds a document by its unique identifier.
+    /// Encontra assincronamente um documento pelo seu identificador único.
     /// </summary>
-    /// <param name="id">The string representation of the document's ObjectId.</param>
-    /// <returns>A task representing the operation, containing the matching document or null if not found.</returns>
-    Task<TDocument?> FindByIdAsync(string id);
+    /// <param name="id">Representação em string do ObjectId do documento.</param>
+    /// <returns>Uma tarefa que retorna o documento se encontrado; caso contrário, null.</returns>
+    Task<TDocument?> FindByIdAsync(TKey id);
 
     /// <summary>
-    ///     Inserts a single document into the collection.
+    /// Insere um único documento na coleção.
     /// </summary>
-    /// <param name="document">The document to insert.</param>
+    /// <param name="document">Documento a ser inserido.</param>
     void InsertOne(TDocument document);
 
     /// <summary>
-    ///     Asynchronously inserts a single document into the collection.
+    /// Insere assincronamente um único documento na coleção.
     /// </summary>
-    /// <param name="document">The document to insert.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <param name="document">Documento a ser inserido.</param>
+    /// <returns>Uma tarefa que representa a operação assíncrona.</returns>
     Task InsertOneAsync(TDocument document);
 
     /// <summary>
-    ///     Inserts multiple documents into the collection in a single operation.
+    /// Insere múltiplos documentos na coleção em uma única operação.
     /// </summary>
-    /// <param name="documents">The collection of documents to insert.</param>
+    /// <param name="documents">Coleção de documentos a serem inseridos.</param>
     void InsertMany(ICollection<TDocument> documents);
 
     /// <summary>
-    ///     Asynchronously inserts multiple documents into the collection in a single operation.
+    /// Insere assincronamente múltiplos documentos na coleção.
     /// </summary>
-    /// <param name="documents">The collection of documents to insert.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task InsertManyAsync(ICollection<TDocument> documents);
+    /// <param name="documents">Coleção de documentos a serem inseridos.</param>
+    /// <param name="options">Opções opcionais para a operação de inserção.</param>
+    /// <returns>Uma tarefa que representa a operação assíncrona de inserção.</returns>
+    Task InsertManyAsync(ICollection<TDocument> documents, InsertManyOptions? options = null);
 
     /// <summary>
-    ///     Asynchronously counts documents matching the filter expression.
+    /// Conta assincronamente o número de documentos que correspondem à expressão de filtro.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <returns>A task representing the operation, containing the count of matching documents.</returns>
+    /// <param name="filterExpression">Expressão para filtrar os documentos.</param>
+    /// <returns>Uma tarefa que retorna o número de documentos correspondentes.</returns>
     Task<long> AsyncCount(Expression<Func<TDocument, bool>> filterExpression);
 
     /// <summary>
-    ///     Counts documents matching the filter expression.
+    /// Conta o número de documentos que correspondem à expressão de filtro.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <returns>The count of matching documents.</returns>
+    /// <param name="filterExpression">Expressão para filtrar os documentos.</param>
+    /// <returns>O número de documentos correspondentes.</returns>
     long Count(Expression<Func<TDocument, bool>> filterExpression);
 
     /// <summary>
-    ///     Replaces a single document (matched by Id) with the provided document.
+    /// Substitui um único documento identificado pelo seu Id.
     /// </summary>
-    /// <param name="document">The replacement document.</param>
-    void ReplaceOne(TDocument document);
+    /// <param name="document">Novo documento para substituição.</param>
+    /// <param name="options">Opções para a operação de substituição.</param>
+    /// <returns>O documento substituído.</returns>
+    TDocument FindOneAndReplace(TDocument document, FindOneAndReplaceOptions<TDocument>? options);
 
     /// <summary>
-    ///     Asynchronously replaces a single document (matched by Id) with the provided document.
+    /// Substitui assincronamente um documento identificado pelo seu Id.
     /// </summary>
-    /// <param name="document">The replacement document.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task<TDocument> ReplaceOneAsync(TDocument document);
+    /// <param name="document">Novo documento para substituição.</param>
+    /// <param name="options">Opções para a operação de substituição.</param>
+    /// <returns>Uma tarefa que retorna o documento substituído.</returns>
+    Task<TDocument> FindOneAndReplaceAsync(TDocument document, FindOneAndReplaceOptions<TDocument>? options);
 
     /// <summary>
-    ///     Deletes a single document matching the filter expression.
+    /// Exclui um único documento que corresponde à expressão de filtro.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression);
+    /// <param name="filterExpression">Expressão para localizar o documento a ser excluído.</param>
+    /// <param name="options">Opções para a operação de exclusão.</param>
+    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument>? options);
 
     /// <summary>
-    ///     Asynchronously deletes a single document matching the filter expression.
+    /// Exclui assincronamente um único documento que corresponde à expressão de filtro.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression);
+    /// <param name="filterExpression">Expressão para localizar o documento a ser excluído.</param>
+    /// <param name="options">Opções para a operação de exclusão.</param>
+    /// <returns>Uma tarefa que representa a operação de exclusão.</returns>
+    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument>? options);
 
     /// <summary>
-    ///     Deletes a document by its unique identifier.
+    /// Exclui um documento pelo seu identificador único.
     /// </summary>
-    /// <param name="id">The string representation of the document's ObjectId.</param>
-    void DeleteById(string id);
+    /// <param name="id">Representação em string do ObjectId do documento.</param>
+    /// <param name="options">Opções para a operação de exclusão.</param>
+    void DeleteById(TKey id, FindOneAndDeleteOptions<TDocument>? options);
 
     /// <summary>
-    ///     Asynchronously deletes a document by its unique identifier.
+    /// Exclui assincronamente um documento pelo seu identificador único.
     /// </summary>
-    /// <param name="id">The string representation of the document's ObjectId.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task DeleteByIdAsync(string id);
+    /// <param name="id">Representação em string do ObjectId do documento.</param>
+    /// <param name="options">Opções para a operação de exclusão.</param>
+    /// <returns>Uma tarefa que representa a operação de exclusão.</returns>
+    Task DeleteByIdAsync(TKey id, FindOneAndDeleteOptions<TDocument>? options);
 
     /// <summary>
-    ///     Deletes multiple documents matching the filter expression.
+    /// Exclui múltiplos documentos que correspondem à expressão de filtro.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
+    /// <param name="filterExpression">Expressão para localizar os documentos a serem excluídos.</param>
     void DeleteMany(Expression<Func<TDocument, bool>> filterExpression);
 
     /// <summary>
-    ///     Asynchronously deletes multiple documents matching the filter expression.
+    /// Exclui assincronamente múltiplos documentos que correspondem à expressão de filtro.
     /// </summary>
-    /// <param name="filterExpression">The LINQ expression to filter documents.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <param name="filterExpression">Expressão para localizar os documentos a serem excluídos.</param>
+    /// <returns>Uma tarefa que representa a operação de exclusão.</returns>
     Task DeleteManyAsync(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Executa uma série de operações dentro de um contexto transacional do MongoDB, de forma assíncrona.
+    /// </summary>
+    /// <typeparam name="TResult">Tipo do resultado retornado pelo corpo da transação.</typeparam>
+    /// <param name="transactionBody">Função que define as operações transacionais usando a sessão fornecida.</param>
+    /// <returns>Uma tarefa que representa a operação transacional, contendo o resultado das operações executadas.</returns>
+    Task<TResult> WithTransactionAsync<TResult>(
+        Func<IClientSessionHandle, Task<TResult>> transactionBody);
 }

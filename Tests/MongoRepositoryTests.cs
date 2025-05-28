@@ -9,7 +9,7 @@ using Xunit;
 namespace Tests;
 
 [BsonCollection("test_entities")]
-public class TestEntity : IDocument
+public class TestEntity : IDocument<ObjectId>
 {
     public required string Name { get; init; }
     public int Value { get; init; }
@@ -18,13 +18,13 @@ public class TestEntity : IDocument
 
 public class MongoRepositoryTests
 {
-    private readonly Mock<IMongoRepository<TestEntity>> _mockRepository;
+    private readonly Mock<IMongoRepository<TestEntity, ObjectId>> _mockRepository;
     private readonly List<TestEntity> _testEntities;
     private readonly TestEntity _testEntity;
 
     public MongoRepositoryTests()
     {
-        _mockRepository = new Mock<IMongoRepository<TestEntity>>();
+        _mockRepository = new Mock<IMongoRepository<TestEntity, ObjectId>>();
 
         _testEntity = new TestEntity
         {
@@ -42,7 +42,7 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_return_fluent_interface_when_finding_documents()
+    public void Find_ShouldReturnFluentInterface()
     {
         var filter = Builders<TestEntity>.Filter.Eq(x => x.Id, _testEntity.Id);
         var mockFindFluent = new Mock<IFindFluent<TestEntity, TestEntity>>();
@@ -57,7 +57,7 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_return_queryable_interface_for_linq_queries()
+    public void AsQueryable_ShouldReturnQueryableInterface()
     {
         var mockQueryable = _testEntities.AsQueryable();
         _mockRepository.Setup(x => x.AsQueryable()).Returns(mockQueryable);
@@ -69,7 +69,7 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_filter_documents_based_on_expression()
+    public void FilterBy_ShouldFilterDocuments()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
         var expected = _testEntities.Where(x => x.Value > 150).ToList();
@@ -84,55 +84,51 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_return_projected_results_when_filtering_with_projection()
+    public void FilterByWithProjection_ShouldReturnProjectedResults()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
         Expression<Func<TestEntity, string>> projection = x => x.Name;
         var expected = _testEntities.Where(x => x.Value > 150).Select(x => x.Name).ToList();
 
-        _mockRepository.Setup(x => x.FilterBy(It.IsAny<Expression<Func<TestEntity, bool>>>(),
+        _mockRepository.Setup(x => x.FilterBy(
+                It.IsAny<Expression<Func<TestEntity, bool>>>(),
                 It.IsAny<Expression<Func<TestEntity, string>>>()))
             .Returns(expected);
 
         var result = _mockRepository.Object.FilterBy(filter, projection);
 
-        Assert.NotNull(result);
-        var enumerable = result as string[] ?? result.ToArray();
-        Assert.Equal(2, enumerable.Length);
-        Assert.All(enumerable, x => Assert.IsType<string>(x));
+        Assert.Equal(2, result.Count());
+        Assert.All(result, x => Assert.IsType<string>(x));
         _mockRepository.Verify(x => x.FilterBy(filter, projection), Times.Once);
     }
 
     [Fact]
-    public void Should_find_single_document_using_expression()
+    public void FindOne_ShouldReturnSingleDocument()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == _testEntity.Id;
-        _mockRepository.Setup(x => x.FindOne(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.FindOne(filter))
             .Returns(_testEntity);
 
         var result = _mockRepository.Object.FindOne(filter);
 
-        Assert.NotNull(result);
-        Assert.Equal(_testEntity.Id, result.Id);
+        Assert.Equal(_testEntity.Id, result!.Id);
         _mockRepository.Verify(x => x.FindOne(filter), Times.Once);
     }
 
     [Fact]
-    public void Should_find_document_by_id()
+    public void FindById_ShouldReturnDocument()
     {
-        var id = _testEntity.Id.ToString();
-        _mockRepository.Setup(x => x.FindById(It.IsAny<string>()))
+        _mockRepository.Setup(x => x.FindById(_testEntity.Id))
             .Returns(_testEntity);
 
-        var result = _mockRepository.Object.FindById(id);
+        var result = _mockRepository.Object.FindById(_testEntity.Id);
 
-        Assert.NotNull(result);
-        Assert.Equal(_testEntity.Id, result.Id);
-        _mockRepository.Verify(x => x.FindById(id), Times.Once);
+        Assert.Equal(_testEntity.Id, result!.Id);
+        _mockRepository.Verify(x => x.FindById(_testEntity.Id), Times.Once);
     }
 
     [Fact]
-    public void Should_insert_single_document()
+    public void InsertOne_ShouldCallRepository()
     {
         _mockRepository.Setup(x => x.InsertOne(It.IsAny<TestEntity>()));
 
@@ -142,7 +138,7 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_insert_multiple_documents_at_once()
+    public void InsertMany_ShouldCallRepository()
     {
         _mockRepository.Setup(x => x.InsertMany(It.IsAny<ICollection<TestEntity>>()));
 
@@ -152,10 +148,10 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_return_correct_count_of_documents()
+    public void Count_ShouldReturnCorrectCount()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
-        _mockRepository.Setup(x => x.Count(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.Count(filter))
             .Returns(2);
 
         var result = _mockRepository.Object.Count(filter);
@@ -165,42 +161,47 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_replace_existing_document()
+    public void FindOneAndReplace_ShouldReplaceDocument()
     {
-        _mockRepository.Setup(x => x.ReplaceOne(It.IsAny<TestEntity>()));
+        var options = new FindOneAndReplaceOptions<TestEntity>();
+        _mockRepository.Setup(x => x.FindOneAndReplace(_testEntity, options))
+            .Returns(_testEntity);
 
-        _mockRepository.Object.ReplaceOne(_testEntity);
+        var result = _mockRepository.Object.FindOneAndReplace(_testEntity, options);
 
-        _mockRepository.Verify(x => x.ReplaceOne(_testEntity), Times.Once);
+        Assert.Equal(_testEntity.Id, result.Id);
+        _mockRepository.Verify(x => x.FindOneAndReplace(_testEntity, options), Times.Once);
     }
 
     [Fact]
-    public void Should_delete_document_using_expression()
+    public void DeleteOne_ShouldCallRepository()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == _testEntity.Id;
-        _mockRepository.Setup(x => x.DeleteOne(It.IsAny<Expression<Func<TestEntity, bool>>>()));
+        var options = new FindOneAndDeleteOptions<TestEntity>();
 
-        _mockRepository.Object.DeleteOne(filter);
+        _mockRepository.Setup(x => x.DeleteOne(filter, options));
 
-        _mockRepository.Verify(x => x.DeleteOne(filter), Times.Once);
+        _mockRepository.Object.DeleteOne(filter, options);
+
+        _mockRepository.Verify(x => x.DeleteOne(filter, options), Times.Once);
     }
 
     [Fact]
-    public void Should_delete_document_by_id()
+    public void DeleteById_ShouldCallRepository()
     {
-        var id = _testEntity.Id.ToString();
-        _mockRepository.Setup(x => x.DeleteById(It.IsAny<string>()));
+        var options = new FindOneAndDeleteOptions<TestEntity>();
+        _mockRepository.Setup(x => x.DeleteById(_testEntity.Id, options));
 
-        _mockRepository.Object.DeleteById(id);
+        _mockRepository.Object.DeleteById(_testEntity.Id, options);
 
-        _mockRepository.Verify(x => x.DeleteById(id), Times.Once);
+        _mockRepository.Verify(x => x.DeleteById(_testEntity.Id, options), Times.Once);
     }
 
     [Fact]
-    public void Should_delete_multiple_documents_using_expression()
+    public void DeleteMany_ShouldCallRepository()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
-        _mockRepository.Setup(x => x.DeleteMany(It.IsAny<Expression<Func<TestEntity, bool>>>()));
+        _mockRepository.Setup(x => x.DeleteMany(filter));
 
         _mockRepository.Object.DeleteMany(filter);
 
@@ -208,35 +209,32 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public async Task Should_find_single_document_async()
+    public async Task FindOneAsync_ShouldReturnSingleDocument()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == _testEntity.Id;
-        _mockRepository.Setup(x => x.FindOneAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.FindOneAsync(filter))
             .ReturnsAsync(_testEntity);
 
         var result = await _mockRepository.Object.FindOneAsync(filter);
 
-        Assert.NotNull(result);
-        Assert.Equal(_testEntity.Id, result.Id);
+        Assert.Equal(_testEntity.Id, result!.Id);
         _mockRepository.Verify(x => x.FindOneAsync(filter), Times.Once);
     }
 
     [Fact]
-    public async Task Should_find_document_by_id_async()
+    public async Task FindByIdAsync_ShouldReturnDocument()
     {
-        var id = _testEntity.Id.ToString();
-        _mockRepository.Setup(x => x.FindByIdAsync(It.IsAny<string>()))
+        _mockRepository.Setup(x => x.FindByIdAsync(_testEntity.Id))
             .ReturnsAsync(_testEntity);
 
-        var result = await _mockRepository.Object.FindByIdAsync(id);
+        var result = await _mockRepository.Object.FindByIdAsync(_testEntity.Id);
 
-        Assert.NotNull(result);
-        Assert.Equal(_testEntity.Id, result.Id);
-        _mockRepository.Verify(x => x.FindByIdAsync(id), Times.Once);
+        Assert.Equal(_testEntity.Id, result!.Id);
+        _mockRepository.Verify(x => x.FindByIdAsync(_testEntity.Id), Times.Once);
     }
 
     [Fact]
-    public async Task Should_insert_single_document_async()
+    public async Task InsertOneAsync_ShouldCallRepository()
     {
         _mockRepository.Setup(x => x.InsertOneAsync(It.IsAny<TestEntity>()))
             .Returns(Task.CompletedTask);
@@ -247,21 +245,22 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public async Task Should_insert_multiple_documents_async()
+    public async Task InsertManyAsync_ShouldCallRepository()
     {
-        _mockRepository.Setup(x => x.InsertManyAsync(It.IsAny<ICollection<TestEntity>>()))
+        var options = new InsertManyOptions();
+        _mockRepository.Setup(x => x.InsertManyAsync(_testEntities, options))
             .Returns(Task.CompletedTask);
 
-        await _mockRepository.Object.InsertManyAsync(_testEntities);
+        await _mockRepository.Object.InsertManyAsync(_testEntities, options);
 
-        _mockRepository.Verify(x => x.InsertManyAsync(_testEntities), Times.Once);
+        _mockRepository.Verify(x => x.InsertManyAsync(_testEntities, options), Times.Once);
     }
 
     [Fact]
-    public async Task Should_return_async_count_of_documents()
+    public async Task AsyncCount_ShouldReturnCorrectCount()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
-        _mockRepository.Setup(x => x.AsyncCount(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.AsyncCount(filter))
             .ReturnsAsync(2);
 
         var result = await _mockRepository.Object.AsyncCount(filter);
@@ -271,47 +270,49 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public async Task Should_replace_document_and_return_updated_version()
+    public async Task FindOneAndReplaceAsync_ShouldReplaceDocument()
     {
-        var updatedEntity = new TestEntity { Id = _testEntity.Id, Name = "Updated" };
-        _mockRepository.Setup(x => x.ReplaceOneAsync(It.IsAny<TestEntity>()))
-            .ReturnsAsync(updatedEntity);
+        var options = new FindOneAndReplaceOptions<TestEntity>();
+        _mockRepository.Setup(x => x.FindOneAndReplaceAsync(_testEntity, options))
+            .ReturnsAsync(_testEntity);
 
-        var result = await _mockRepository.Object.ReplaceOneAsync(updatedEntity);
+        var result = await _mockRepository.Object.FindOneAndReplaceAsync(_testEntity, options);
 
-        Assert.Equal("Updated", result.Name);
-        _mockRepository.Verify(x => x.ReplaceOneAsync(updatedEntity), Times.Once);
+        Assert.Equal(_testEntity.Id, result.Id);
+        _mockRepository.Verify(x => x.FindOneAndReplaceAsync(_testEntity, options), Times.Once);
     }
 
     [Fact]
-    public async Task Should_delete_document_async_using_expression()
+    public async Task DeleteOneAsync_ShouldCallRepository()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == _testEntity.Id;
-        _mockRepository.Setup(x => x.DeleteOneAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        var options = new FindOneAndDeleteOptions<TestEntity>();
+
+        _mockRepository.Setup(x => x.DeleteOneAsync(filter, options))
             .Returns(Task.CompletedTask);
 
-        await _mockRepository.Object.DeleteOneAsync(filter);
+        await _mockRepository.Object.DeleteOneAsync(filter, options);
 
-        _mockRepository.Verify(x => x.DeleteOneAsync(filter), Times.Once);
+        _mockRepository.Verify(x => x.DeleteOneAsync(filter, options), Times.Once);
     }
 
     [Fact]
-    public async Task Should_delete_document_async_by_id()
+    public async Task DeleteByIdAsync_ShouldCallRepository()
     {
-        var id = _testEntity.Id.ToString();
-        _mockRepository.Setup(x => x.DeleteByIdAsync(It.IsAny<string>()))
+        var options = new FindOneAndDeleteOptions<TestEntity>();
+        _mockRepository.Setup(x => x.DeleteByIdAsync(_testEntity.Id, options))
             .Returns(Task.CompletedTask);
 
-        await _mockRepository.Object.DeleteByIdAsync(id);
+        await _mockRepository.Object.DeleteByIdAsync(_testEntity.Id, options);
 
-        _mockRepository.Verify(x => x.DeleteByIdAsync(id), Times.Once);
+        _mockRepository.Verify(x => x.DeleteByIdAsync(_testEntity.Id, options), Times.Once);
     }
 
     [Fact]
-    public async Task Should_delete_multiple_documents_async()
+    public async Task DeleteManyAsync_ShouldCallRepository()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 150;
-        _mockRepository.Setup(x => x.DeleteManyAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.DeleteManyAsync(filter))
             .Returns(Task.CompletedTask);
 
         await _mockRepository.Object.DeleteManyAsync(filter);
@@ -320,36 +321,52 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_return_null_when_document_not_found_by_id()
+    public async Task WithTransactionAsync_ShouldExecuteTransaction()
     {
-        var id = ObjectId.GenerateNewId().ToString();
-        _mockRepository.Setup(x => x.FindById(It.IsAny<string>()))
+        var expectedResult = "transaction-result";
+        _mockRepository.Setup(x => x.WithTransactionAsync(It.IsAny<Func<IClientSessionHandle, Task<string>>>()))
+            .ReturnsAsync(expectedResult);
+
+        var result = await _mockRepository.Object.WithTransactionAsync(
+            session => Task.FromResult(expectedResult));
+
+        Assert.Equal(expectedResult, result);
+        _mockRepository.Verify(x => x.WithTransactionAsync(It.IsAny<Func<IClientSessionHandle, Task<string>>>()), Times.Once);
+    }
+
+    // Testes para casos de borda
+
+    [Fact]
+    public void FindById_ShouldReturnNullWhenNotFound()
+    {
+        var nonExistentId = ObjectId.GenerateNewId();
+        _mockRepository.Setup(x => x.FindById(nonExistentId))
             .Returns((TestEntity)null!);
 
-        var result = _mockRepository.Object.FindById(id);
+        var result = _mockRepository.Object.FindById(nonExistentId);
 
         Assert.Null(result);
-        _mockRepository.Verify(x => x.FindById(id), Times.Once);
+        _mockRepository.Verify(x => x.FindById(nonExistentId), Times.Once);
     }
 
     [Fact]
-    public async Task Should_return_null_async_when_document_not_found_by_id()
+    public async Task FindByIdAsync_ShouldReturnNullWhenNotFound()
     {
-        var id = ObjectId.GenerateNewId().ToString();
-        _mockRepository.Setup(x => x.FindByIdAsync(It.IsAny<string>()))
+        var nonExistentId = ObjectId.GenerateNewId();
+        _mockRepository.Setup(x => x.FindByIdAsync(nonExistentId))
             .ReturnsAsync((TestEntity)null!);
 
-        var result = await _mockRepository.Object.FindByIdAsync(id);
+        var result = await _mockRepository.Object.FindByIdAsync(nonExistentId);
 
         Assert.Null(result);
-        _mockRepository.Verify(x => x.FindByIdAsync(id), Times.Once);
+        _mockRepository.Verify(x => x.FindByIdAsync(nonExistentId), Times.Once);
     }
 
     [Fact]
-    public void Should_return_null_when_document_not_found_by_expression()
+    public void FindOne_ShouldReturnNullWhenNotFound()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == ObjectId.GenerateNewId();
-        _mockRepository.Setup(x => x.FindOne(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.FindOne(filter))
             .Returns((TestEntity)null!);
 
         var result = _mockRepository.Object.FindOne(filter);
@@ -359,10 +376,10 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public async Task Should_return_null_async_when_document_not_found_by_expression()
+    public async Task FindOneAsync_ShouldReturnNullWhenNotFound()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Id == ObjectId.GenerateNewId();
-        _mockRepository.Setup(x => x.FindOneAsync(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.FindOneAsync(filter))
             .ReturnsAsync((TestEntity)null!);
 
         var result = await _mockRepository.Object.FindOneAsync(filter);
@@ -372,10 +389,10 @@ public class MongoRepositoryTests
     }
 
     [Fact]
-    public void Should_return_empty_list_when_no_documents_match_filter()
+    public void FilterBy_ShouldReturnEmptyWhenNoMatches()
     {
         Expression<Func<TestEntity, bool>> filter = x => x.Value > 1000;
-        _mockRepository.Setup(x => x.FilterBy(It.IsAny<Expression<Func<TestEntity, bool>>>()))
+        _mockRepository.Setup(x => x.FilterBy(filter))
             .Returns(new List<TestEntity>());
 
         var result = _mockRepository.Object.FilterBy(filter);

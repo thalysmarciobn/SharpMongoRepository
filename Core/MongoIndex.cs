@@ -12,7 +12,7 @@ namespace SharpMongoRepository;
 ///     to provide a complete configuration for creating indexes in MongoDB.
 ///     The properties are marked as required to ensure complete initialization.
 /// </remarks>
-public class MongoIndex<TDocument> where TDocument : IDocument
+public class MongoIndex<TDocument, TKey> where TDocument : IDocument<TKey>
 {
     /// <summary>
     ///     Gets the definition of the index keys.

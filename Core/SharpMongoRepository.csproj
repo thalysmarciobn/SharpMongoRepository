@@ -5,7 +5,7 @@
         <Nullable>enable</Nullable>
 
         <PackageId>SharpMongoRepository</PackageId>
-        <Version>0.0.3</Version>
+        <Version>0.0.4</Version>
         <Authors>ThalysMarcioBN</Authors>
         <Company>ThalysMarcioBN</Company>
         <Description>A MongoDB repository implementation for .NET</Description>
@@ -18,12 +18,19 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <SignAssembly>False</SignAssembly>
+        <Title>CSharp Mongo Repository</Title>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include="README.md" Pack="true" PackagePath="\"/>
+        <None Include="..\README.md">
+          <Pack>True</Pack>
+          <PackagePath>\</PackagePath>
+        </None>
+        <None Include="README.md" Pack="true" PackagePath="\" />
 
-        <PackageReference Include="MongoDB.Bson" Version="3.4.0"/>
-        <PackageReference Include="MongoDB.Driver" Version="3.4.0"/>
+        <PackageReference Include="MongoDB.Bson" Version="3.4.0" />
+        <PackageReference Include="MongoDB.Driver" Version="3.4.0" />
     </ItemGroup>
 </Project>
