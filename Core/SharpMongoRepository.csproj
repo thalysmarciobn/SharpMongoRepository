@@ -5,7 +5,7 @@
         <Nullable>enable</Nullable>
 
         <PackageId>SharpMongoRepository</PackageId>
-        <Version>0.0.5</Version>
+        <Version>0.0.6</Version>
         <Authors>ThalysMarcioBN</Authors>
         <Company>ThalysMarcioBN</Company>
         <Description>A clean, fluent MongoDB repository pattern for .NET. Simplifies CRUD operations, LINQ queries, transactions, and index management. Supports sync/async workflows and DI integration. Perfect for APIs and scalable apps.</Description>
