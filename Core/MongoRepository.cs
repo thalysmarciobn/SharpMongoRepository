@@ -209,46 +209,51 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         return await _lazyCollection.Value.Find(clientSessionHandle, filterExpression, options).FirstOrDefaultAsync();
     }
 
+
     /// <inheritdoc />
-    public TDocument? FindById(TKey id)
+    public TDocument? FindById(TKey id, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 
-        return _lazyCollection.Value.Find(filter).SingleOrDefault();
+        var opt = options ?? ApplyTimeout();
+
+        return _lazyCollection.Value.Find(filter, options).SingleOrDefault();
     }
 
     /// <inheritdoc />
-    public TDocument? FindById(TKey id, IClientSessionHandle clientSessionHandle)
+    public TDocument? FindById(TKey id, IClientSessionHandle clientSessionHandle, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 
-        return _lazyCollection.Value.Find(clientSessionHandle, filter).SingleOrDefault();
+        var opt = options ?? ApplyTimeout();
+
+        return _lazyCollection.Value.Find(clientSessionHandle, filter, opt).SingleOrDefault();
     }
 
     /// <inheritdoc />
-    public async Task<TDocument?> FindByIdAsync(TKey id)
+    public async Task<TDocument?> FindByIdAsync(TKey id, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 
-        var options = ApplyTimeout();
+        var opt = options ?? ApplyTimeout();
 
-        return await _lazyCollection.Value.Find(filter, options)
+        return await _lazyCollection.Value.Find(filter, opt)
             .FirstOrDefaultAsync();
     }
 
     /// <inheritdoc />
-    public async Task<TDocument?> FindByIdAsync(TKey id, IClientSessionHandle clientSessionHandle)
+    public async Task<TDocument?> FindByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 
-        var options = ApplyTimeout();
+        var opt = options ?? ApplyTimeout();
 
-        return await _lazyCollection.Value.Find(clientSessionHandle, filter, options)
+        return await _lazyCollection.Value.Find(clientSessionHandle, filter, opt)
             .FirstOrDefaultAsync();
     }
 
     /// <inheritdoc />
-    public void InsertOne(TDocument document)
+    public void InsertOne(TDocument document, InsertOneOptions? options = null)
     {
         if (_idGenerator.IsEmpty(document.Id))
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
@@ -258,11 +263,11 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         var collection = _lazyCollection.Value
             .WithWriteConcern(writeConcern);
 
-        collection.InsertOne(document);
+        collection.InsertOne(document, options);
     }
 
     /// <inheritdoc />
-    public void InsertOne(TDocument document, IClientSessionHandle clientSessionHandle)
+    public void InsertOne(TDocument document, IClientSessionHandle clientSessionHandle, InsertOneOptions? options = null)
     {
         if (_idGenerator.IsEmpty(document.Id))
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
@@ -272,11 +277,11 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         var collection = _lazyCollection.Value
             .WithWriteConcern(writeConcern);
 
-        collection.InsertOne(clientSessionHandle, document);
+        collection.InsertOne(clientSessionHandle, document, options);
     }
 
     /// <inheritdoc />
-    public async Task InsertOneAsync(TDocument document)
+    public async Task InsertOneAsync(TDocument document, InsertOneOptions? options = null)
     {
         if (_idGenerator.IsEmpty(document.Id))
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
@@ -286,11 +291,11 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         var collection = _lazyCollection.Value
             .WithWriteConcern(writeConcern);
 
-        await collection.InsertOneAsync(document);
+        await collection.InsertOneAsync(document, options);
     }
 
     /// <inheritdoc />
-    public async Task InsertOneAsync(TDocument document, IClientSessionHandle clientSessionHandle)
+    public async Task InsertOneAsync(TDocument document, IClientSessionHandle clientSessionHandle, InsertOneOptions? options = null)
     {
         if (_idGenerator.IsEmpty(document.Id))
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
@@ -300,51 +305,31 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         var collection = _lazyCollection.Value
             .WithWriteConcern(writeConcern);
 
-        await collection.InsertOneAsync(clientSessionHandle, document);
+        await collection.InsertOneAsync(clientSessionHandle, document, options);
     }
 
     /// <inheritdoc />
-    public void InsertMany(ICollection<TDocument> documents)
+    public void InsertMany(ICollection<TDocument> documents, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
 
         _lazyCollection.Value
             .WithWriteConcern(writeConcern)
-            .InsertMany(documents);
+            .InsertMany(documents, options);
     }
 
     /// <inheritdoc />
-    public void InsertMany(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle)
+    public void InsertMany(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
 
         _lazyCollection.Value
             .WithWriteConcern(writeConcern)
-            .InsertMany(clientSessionHandle, documents);
+            .InsertMany(clientSessionHandle, documents, options);
     }
 
     /// <inheritdoc />
-    public async Task InsertManyAsync(ICollection<TDocument> documents)
-    {
-        var writeConcern = ApplyWriteTimeout();
-
-        await _lazyCollection.Value
-            .WithWriteConcern(writeConcern)
-            .InsertManyAsync(documents);
-    }
-
-    /// <inheritdoc />
-    public async Task InsertManyAsync(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle)
-    {
-        var writeConcern = ApplyWriteTimeout();
-
-        await _lazyCollection.Value
-            .WithWriteConcern(writeConcern)
-            .InsertManyAsync(clientSessionHandle, documents);
-    }
-
-    /// <inheritdoc />
-    public async Task InsertManyAsync(ICollection<TDocument> documents, InsertManyOptions options)
+    public async Task InsertManyAsync(ICollection<TDocument> documents, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
 
@@ -354,7 +339,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public async Task InsertManyAsync(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions options)
+    public async Task InsertManyAsync(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
 
@@ -408,23 +393,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public TDocument FindOneAndReplace(TDocument document)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
-        return _lazyCollection.Value.FindOneAndReplace(filter, document);
-    }
-
-    /// <inheritdoc />
-    public TDocument FindOneAndReplace(TDocument document, IClientSessionHandle clientSessionHandle)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
-        return _lazyCollection.Value.FindOneAndReplace(clientSessionHandle, filter, document);
-    }
-
-    /// <inheritdoc />
-    public TDocument FindOneAndReplace(TDocument document, FindOneAndReplaceOptions<TDocument> options)
+    public TDocument FindOneAndReplace(TDocument document, FindOneAndReplaceOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
 
@@ -432,7 +401,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public TDocument FindOneAndReplace(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument> options)
+    public TDocument FindOneAndReplace(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
 
@@ -472,71 +441,31 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public void DeleteOne(Expression<Func<TDocument, bool>> filterExpression)
-    {
-        _lazyCollection.Value.FindOneAndDelete(filterExpression);
-    }
-
-    /// <inheritdoc />
-    public void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle)
-    {
-        _lazyCollection.Value.FindOneAndDelete(clientSessionHandle, filterExpression);
-    }
-
-    /// <inheritdoc />
-    public void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument> options)
+    public void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         _lazyCollection.Value.FindOneAndDelete(filterExpression, options);
     }
 
     /// <inheritdoc />
-    public void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options)
+    public void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         _lazyCollection.Value.FindOneAndDelete(clientSessionHandle, filterExpression, options);
     }
 
     /// <inheritdoc />
-    public async Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression)
-    {
-        await _lazyCollection.Value.FindOneAndDeleteAsync(filterExpression);
-    }
-
-    /// <inheritdoc />
-    public async Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle)
-    {
-        await _lazyCollection.Value.FindOneAndDeleteAsync(clientSessionHandle, filterExpression);
-    }
-
-    /// <inheritdoc />
-    public async Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument> options)
+    public async Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         await _lazyCollection.Value.FindOneAndDeleteAsync(filterExpression, options);
     }
 
     /// <inheritdoc />
-    public async Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options)
+    public async Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         await _lazyCollection.Value.FindOneAndDeleteAsync(clientSessionHandle, filterExpression, options);
     }
 
     /// <inheritdoc />
-    public void DeleteById(TKey id)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
-        _lazyCollection.Value.FindOneAndDelete(filter);
-    }
-
-    /// <inheritdoc />
-    public void DeleteById(TKey id, IClientSessionHandle clientSessionHandle)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
-        _lazyCollection.Value.FindOneAndDelete(clientSessionHandle, filter);
-    }
-
-    /// <inheritdoc />
-    public void DeleteById(TKey id, FindOneAndDeleteOptions<TDocument> options)
+    public void DeleteById(TKey id, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 
@@ -544,7 +473,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public void DeleteById(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options)
+    public void DeleteById(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 
@@ -552,23 +481,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public async Task DeleteByIdAsync(TKey id)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
-        await _lazyCollection.Value.FindOneAndDeleteAsync(filter);
-    }
-
-    /// <inheritdoc />
-    public async Task DeleteByIdAsync(TKey id, IClientSessionHandle clientSessionHandle)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
-        await _lazyCollection.Value.FindOneAndDeleteAsync(clientSessionHandle, filter);
-    }
-
-    /// <inheritdoc />
-    public async Task DeleteByIdAsync(TKey id, FindOneAndDeleteOptions<TDocument> options)
+    public async Task DeleteByIdAsync(TKey id, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 
@@ -576,7 +489,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public async Task DeleteByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options)
+    public async Task DeleteByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
 

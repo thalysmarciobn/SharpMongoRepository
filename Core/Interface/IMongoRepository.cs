@@ -4,224 +4,371 @@ using MongoDB.Driver;
 namespace SharpMongoRepository.Interface;
 
 /// <summary>
-/// Representa uma interface genérica de repositório para operações com MongoDB.
+/// Represents a generic repository interface for MongoDB operations.
 /// </summary>
-/// <typeparam name="TDocument">Tipo do documento que implementa <see cref="IDocument"/>.</typeparam>
+/// <typeparam name="TDocument">The document type that implements <see cref="IDocument{TKey}"/>.</typeparam>
+/// <typeparam name="TKey">The type of the document's primary key.</typeparam>
 /// <remarks>
-/// Esta interface fornece operações síncronas e assíncronas de CRUD para MongoDB,
-/// com suporte a filtragem, projeção, contagem e execução de transações.
+/// This interface provides synchronous and asynchronous CRUD operations for MongoDB,
+/// with support for filtering, projection, counting, and transaction execution.
 /// </remarks>
 public interface IMongoRepository<TDocument, TKey> where TDocument : IDocument<TKey>
 {
     /// <summary>
-    /// Encontra documentos que correspondem à definição de filtro do MongoDB especificada.
+    /// Finds documents matching the specified MongoDB filter definition.
     /// </summary>
-    /// <param name="filter">A definição de filtro do MongoDB.</param>
-    /// <returns>Um <see cref="IFindFluent{TDocument, TDocument}"/> para operações adicionais de consulta.</returns>
+    /// <param name="filter">The MongoDB filter definition.</param>
+    /// <returns>An <see cref="IFindFluent{TDocument, TDocument}"/> for additional query operations.</returns>
     IFindFluent<TDocument, TDocument> Find(FilterDefinition<TDocument> filter);
 
     /// <summary>
-    /// Fornece capacidades de consulta LINQ para a coleção de documentos.
+    /// Provides LINQ query capabilities for the document collection.
     /// </summary>
-    /// <returns>Um <see cref="IQueryable{TDocument}"/> para realizar consultas LINQ.</returns>
+    /// <returns>An <see cref="IQueryable{TDocument}"/> for LINQ queries.</returns>
     IQueryable<TDocument?> AsQueryable();
 
     /// <summary>
-    /// Filtra documentos usando a expressão de predicado especificada.
+    /// Filters documents using the specified predicate expression.
     /// </summary>
-    /// <param name="filterExpression">Expressão LINQ utilizada para filtrar os documentos.</param>
-    /// <returns>Uma coleção de documentos que correspondem ao filtro.</returns>
+    /// <param name="filterExpression">LINQ expression used to filter documents.</param>
+    /// <returns>A collection of documents matching the filter.</returns>
     IEnumerable<TDocument?> FilterBy(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Filters documents using the specified predicate expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">LINQ expression used to filter documents.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>A collection of documents matching the filter.</returns>
     IEnumerable<TDocument?> FilterBy(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Filtra e projeta documentos utilizando as expressões fornecidas.
+    /// Filters and projects documents using the provided expressions.
     /// </summary>
-    /// <typeparam name="TProjected">Tipo do resultado projetado.</typeparam>
-    /// <param name="filterExpression">Expressão LINQ usada para filtrar os documentos.</param>
-    /// <param name="projectionExpression">Expressão LINQ usada para projetar os documentos.</param>
-    /// <returns>Uma coleção de resultados projetados.</returns>
+    /// <typeparam name="TProjected">The type of the projected result.</typeparam>
+    /// <param name="filterExpression">LINQ expression used to filter documents.</param>
+    /// <param name="projectionExpression">LINQ expression used to project documents.</param>
+    /// <returns>A collection of projected results.</returns>
     IEnumerable<TProjected> FilterBy<TProjected>(
         Expression<Func<TDocument, bool>> filterExpression,
         Expression<Func<TDocument, TProjected>> projectionExpression);
+
+    /// <summary>
+    /// Filters and projects documents using the provided expressions within a transaction session.
+    /// </summary>
+    /// <typeparam name="TProjected">The type of the projected result.</typeparam>
+    /// <param name="filterExpression">LINQ expression used to filter documents.</param>
+    /// <param name="projectionExpression">LINQ expression used to project documents.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>A collection of projected results.</returns>
     IEnumerable<TProjected> FilterBy<TProjected>(
         Expression<Func<TDocument, bool>> filterExpression,
         Expression<Func<TDocument, TProjected>> projectionExpression,
         IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Recupera assincronamente todos os documentos da coleção.
+    /// Asynchronously retrieves all documents from the collection.
     /// </summary>
-    /// <returns>Uma tarefa que retorna um cursor assíncrono para iterar sobre os documentos.</returns>
+    /// <returns>A task that returns an async cursor to iterate over the documents.</returns>
     Task<IAsyncCursor<TDocument>> AllAsync();
+
+    /// <summary>
+    /// Asynchronously retrieves all documents from the collection within a transaction session.
+    /// </summary>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>A task that returns an async cursor to iterate over the documents.</returns>
     Task<IAsyncCursor<TDocument>> AllAsync(IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Encontra um único documento que corresponda à expressão fornecida.
+    /// Finds a single document matching the specified expression.
     /// </summary>
-    /// <param name="filterExpression">Expressão LINQ para filtrar o documento.</param>
-    /// <returns>O documento correspondente, ou null se não encontrado.</returns>
+    /// <param name="filterExpression">LINQ expression to filter the document.</param>
+    /// <returns>The matching document, or null if not found.</returns>
     TDocument? FindOne(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Finds a single document matching the specified expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">LINQ expression to filter the document.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>The matching document, or null if not found.</returns>
     TDocument? FindOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Encontra assincronamente um único documento que corresponda à expressão fornecida.
+    /// Asynchronously finds a single document matching the specified expression.
     /// </summary>
-    /// <param name="filterExpression">Expressão LINQ para filtrar o documento.</param>
-    /// <returns>Uma tarefa que retorna o documento correspondente ou null.</returns>
+    /// <param name="filterExpression">LINQ expression to filter the document.</param>
+    /// <returns>A task that returns the matching document or null.</returns>
     Task<TDocument?> FindOneAsync(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Asynchronously finds a single document matching the specified expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">LINQ expression to filter the document.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>A task that returns the matching document or null.</returns>
     Task<TDocument?> FindOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Encontra um documento pelo seu identificador único.
+    /// Finds a document by its unique identifier.
     /// </summary>
-    /// <param name="id">Representação em string do ObjectId do documento.</param>
-    /// <returns>O documento se encontrado; caso contrário, null.</returns>
-    TDocument? FindById(TKey id);
-    TDocument? FindById(TKey id, IClientSessionHandle clientSessionHandle);
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="options">Optional find options.</param>
+    /// <returns>The document if found; otherwise, null.</returns>
+    TDocument? FindById(TKey id, FindOptions? options = null);
 
     /// <summary>
-    /// Encontra assincronamente um documento pelo seu identificador único.
+    /// Finds a document by its unique identifier within a transaction session.
     /// </summary>
-    /// <param name="id">Representação em string do ObjectId do documento.</param>
-    /// <returns>Uma tarefa que retorna o documento se encontrado; caso contrário, null.</returns>
-    Task<TDocument?> FindByIdAsync(TKey id);
-    Task<TDocument?> FindByIdAsync(TKey id, IClientSessionHandle clientSessionHandle);
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Optional find options.</param>
+    /// <returns>The document if found; otherwise, null.</returns>
+    TDocument? FindById(TKey id, IClientSessionHandle clientSessionHandle, FindOptions? options = null);
 
     /// <summary>
-    /// Insere um único documento na coleção.
+    /// Asynchronously finds a document by its unique identifier.
     /// </summary>
-    /// <param name="document">Documento a ser inserido.</param>
-    void InsertOne(TDocument document);
-    void InsertOne(TDocument document, IClientSessionHandle clientSessionHandle);
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="options">Optional find options.</param>
+    /// <returns>A task that returns the document if found; otherwise, null.</returns>
+    Task<TDocument?> FindByIdAsync(TKey id, FindOptions? options = null);
 
     /// <summary>
-    /// Insere assincronamente um único documento na coleção.
+    /// Asynchronously finds a document by its unique identifier within a transaction session.
     /// </summary>
-    /// <param name="document">Documento a ser inserido.</param>
-    /// <returns>Uma tarefa que representa a operação assíncrona.</returns>
-    Task InsertOneAsync(TDocument document);
-    Task InsertOneAsync(TDocument document, IClientSessionHandle clientSessionHandle);
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Optional find options.</param>
+    /// <returns>A task that returns the document if found; otherwise, null.</returns>
+    Task<TDocument?> FindByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOptions? options = null);
 
     /// <summary>
-    /// Insere múltiplos documentos na coleção em uma única operação.
+    /// Inserts a single document into the collection.
     /// </summary>
-    /// <param name="documents">Coleção de documentos a serem inseridos.</param>
-    void InsertMany(ICollection<TDocument> documents);
-    void InsertMany(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle);
+    /// <param name="document">The document to insert.</param>
+    /// <param name="options">Optional insert options.</param>
+    void InsertOne(TDocument document, InsertOneOptions? options = null);
 
     /// <summary>
-    /// Insere assincronamente múltiplos documentos na coleção.
+    /// Inserts a single document into the collection within a transaction session.
     /// </summary>
-    /// <param name="documents">Coleção de documentos a serem inseridos.</param>
-    /// <param name="options">Opções opcionais para a operação de inserção.</param>
-    /// <returns>Uma tarefa que representa a operação assíncrona de inserção.</returns>
-    Task InsertManyAsync(ICollection<TDocument> documents);
-    Task InsertManyAsync(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle);
-    Task InsertManyAsync(ICollection<TDocument> documents, InsertManyOptions options);
-    Task InsertManyAsync(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions options);
+    /// <param name="document">The document to insert.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Optional insert options.</param>
+    void InsertOne(TDocument document, IClientSessionHandle clientSessionHandle, InsertOneOptions? options = null);
 
     /// <summary>
-    /// Conta assincronamente o número de documentos que correspondem à expressão de filtro.
+    /// Asynchronously inserts a single document into the collection.
     /// </summary>
-    /// <param name="filterExpression">Expressão para filtrar os documentos.</param>
-    /// <returns>Uma tarefa que retorna o número de documentos correspondentes.</returns>
+    /// <param name="document">The document to insert.</param>
+    /// <param name="options">Optional insert options.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task InsertOneAsync(TDocument document, InsertOneOptions? options = null);
+
+    /// <summary>
+    /// Asynchronously inserts a single document into the collection within a transaction session.
+    /// </summary>
+    /// <param name="document">The document to insert.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Optional insert options.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task InsertOneAsync(TDocument document, IClientSessionHandle clientSessionHandle, InsertOneOptions? options = null);
+
+    /// <summary>
+    /// Inserts multiple documents into the collection in a single operation.
+    /// </summary>
+    /// <param name="documents">The collection of documents to insert.</param>
+    /// <param name="options">Optional insert options.</param>
+    void InsertMany(ICollection<TDocument> documents, InsertManyOptions? options = null);
+
+    /// <summary>
+    /// Inserts multiple documents into the collection in a single operation within a transaction session.
+    /// </summary>
+    /// <param name="documents">The collection of documents to insert.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Optional insert options.</param>
+    void InsertMany(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions? options = null);
+
+    /// <summary>
+    /// Asynchronously inserts multiple documents into the collection.
+    /// </summary>
+    /// <param name="documents">The collection of documents to insert.</param>
+    /// <param name="options">Optional insert options.</param>
+    /// <returns>A task representing the asynchronous insert operation.</returns>
+    Task InsertManyAsync(ICollection<TDocument> documents, InsertManyOptions? options = null);
+
+    /// <summary>
+    /// Asynchronously inserts multiple documents into the collection within a transaction session.
+    /// </summary>
+    /// <param name="documents">The collection of documents to insert.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Optional insert options.</param>
+    /// <returns>A task representing the asynchronous insert operation.</returns>
+    Task InsertManyAsync(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions? options = null);
+
+    /// <summary>
+    /// Asynchronously counts the number of documents matching the filter expression.
+    /// </summary>
+    /// <param name="filterExpression">Expression to filter documents.</param>
+    /// <returns>A task that returns the number of matching documents.</returns>
     Task<long> AsyncCount(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Asynchronously counts the number of documents matching the filter expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">Expression to filter documents.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>A task that returns the number of matching documents.</returns>
     Task<long> AsyncCount(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Conta o número de documentos que correspondem à expressão de filtro.
+    /// Counts the number of documents matching the filter expression.
     /// </summary>
-    /// <param name="filterExpression">Expressão para filtrar os documentos.</param>
-    /// <returns>O número de documentos correspondentes.</returns>
+    /// <param name="filterExpression">Expression to filter documents.</param>
+    /// <returns>The number of matching documents.</returns>
     long Count(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Counts the number of documents matching the filter expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">Expression to filter documents.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>The number of matching documents.</returns>
     long Count(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Substitui um único documento identificado pelo seu Id.
+    /// Replaces a single document identified by its Id.
     /// </summary>
-    /// <param name="document">Novo documento para substituição.</param>
-    /// <param name="options">Opções para a operação de substituição.</param>
-    /// <returns>O documento substituído.</returns>
-    TDocument FindOneAndReplace(TDocument document);
-    TDocument FindOneAndReplace(TDocument document, IClientSessionHandle clientSessionHandle);
-    TDocument FindOneAndReplace(TDocument document, FindOneAndReplaceOptions<TDocument> options);
-    TDocument FindOneAndReplace(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument> options);
+    /// <param name="document">The new document for replacement.</param>
+    /// <param name="options">Options for the replace operation.</param>
+    /// <returns>The replaced document.</returns>
+    TDocument FindOneAndReplace(TDocument document, FindOneAndReplaceOptions<TDocument>? options = null);
 
     /// <summary>
-    /// Substitui assincronamente um documento identificado pelo seu Id.
+    /// Replaces a single document identified by its Id within a transaction session.
     /// </summary>
-    /// <param name="document">Novo documento para substituição.</param>
-    /// <param name="options">Opções para a operação de substituição.</param>
-    /// <returns>Uma tarefa que retorna o documento substituído.</returns>
-    Task<TDocument> FindOneAndReplaceAsync(TDocument document);
-    Task<TDocument> FindOneAndReplaceAsync(TDocument document, IClientSessionHandle clientSessionHandle);
-    Task<TDocument> FindOneAndReplaceAsync(TDocument document, FindOneAndReplaceOptions<TDocument> options);
-    Task<TDocument> FindOneAndReplaceAsync(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument> options);
+    /// <param name="document">The new document for replacement.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Options for the replace operation.</param>
+    /// <returns>The replaced document.</returns>
+    TDocument FindOneAndReplace(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument>? options = null);
 
     /// <summary>
-    /// Exclui um único documento que corresponde à expressão de filtro.
+    /// Asynchronously replaces a document identified by its Id.
     /// </summary>
-    /// <param name="filterExpression">Expressão para localizar o documento a ser excluído.</param>
-    /// <param name="options">Opções para a operação de exclusão.</param>
-    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression);
-    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
-    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument> options);
-    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options);
+    /// <param name="document">The new document for replacement.</param>
+    /// <param name="options">Options for the replace operation.</param>
+    /// <returns>A task that returns the replaced document.</returns>
+    Task<TDocument> FindOneAndReplaceAsync(TDocument document, FindOneAndReplaceOptions<TDocument>? options = null);
 
     /// <summary>
-    /// Exclui assincronamente um único documento que corresponde à expressão de filtro.
+    /// Asynchronously replaces a document identified by its Id within a transaction session.
     /// </summary>
-    /// <param name="filterExpression">Expressão para localizar o documento a ser excluído.</param>
-    /// <param name="options">Opções para a operação de exclusão.</param>
-    /// <returns>Uma tarefa que representa a operação de exclusão.</returns>
-    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression);
-    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
-    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument> options);
-    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options);
+    /// <param name="document">The new document for replacement.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Options for the replace operation.</param>
+    /// <returns>A task that returns the replaced document.</returns>
+    Task<TDocument> FindOneAndReplaceAsync(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument>? options = null);
 
     /// <summary>
-    /// Exclui um documento pelo seu identificador único.
+    /// Deletes a single document matching the filter expression.
     /// </summary>
-    /// <param name="id">Representação em string do ObjectId do documento.</param>
-    /// <param name="options">Opções para a operação de exclusão.</param>
-    void DeleteById(TKey id);
-    void DeleteById(TKey id, IClientSessionHandle clientSessionHandle);
-    void DeleteById(TKey id, FindOneAndDeleteOptions<TDocument> options);
-    void DeleteById(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options);
+    /// <param name="filterExpression">Expression to locate the document to delete.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument>? options = null);
 
     /// <summary>
-    /// Exclui assincronamente um documento pelo seu identificador único.
+    /// Deletes a single document matching the filter expression within a transaction session.
     /// </summary>
-    /// <param name="id">Representação em string do ObjectId do documento.</param>
-    /// <param name="options">Opções para a operação de exclusão.</param>
-    /// <returns>Uma tarefa que representa a operação de exclusão.</returns>
-    Task DeleteByIdAsync(TKey id);
-    Task DeleteByIdAsync(TKey id, IClientSessionHandle clientSessionHandle);
-    Task DeleteByIdAsync(TKey id, FindOneAndDeleteOptions<TDocument> options);
-    Task DeleteByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument> options);
+    /// <param name="filterExpression">Expression to locate the document to delete.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    void DeleteOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null);
 
     /// <summary>
-    /// Exclui múltiplos documentos que correspondem à expressão de filtro.
+    /// Asynchronously deletes a single document matching the filter expression.
     /// </summary>
-    /// <param name="filterExpression">Expressão para localizar os documentos a serem excluídos.</param>
+    /// <param name="filterExpression">Expression to locate the document to delete.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    /// <returns>A task representing the delete operation.</returns>
+    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, FindOneAndDeleteOptions<TDocument>? options = null);
+
+    /// <summary>
+    /// Asynchronously deletes a single document matching the filter expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">Expression to locate the document to delete.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    /// <returns>A task representing the delete operation.</returns>
+    Task DeleteOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null);
+
+    /// <summary>
+    /// Deletes a document by its unique identifier.
+    /// </summary>
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    void DeleteById(TKey id, FindOneAndDeleteOptions<TDocument>? options = null);
+
+    /// <summary>
+    /// Deletes a document by its unique identifier within a transaction session.
+    /// </summary>
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    void DeleteById(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null);
+
+    /// <summary>
+    /// Asynchronously deletes a document by its unique identifier.
+    /// </summary>
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    /// <returns>A task representing the delete operation.</returns>
+    Task DeleteByIdAsync(TKey id, FindOneAndDeleteOptions<TDocument>? options = null);
+
+    /// <summary>
+    /// Asynchronously deletes a document by its unique identifier within a transaction session.
+    /// </summary>
+    /// <param name="id">The document's identifier.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <param name="options">Options for the delete operation.</param>
+    /// <returns>A task representing the delete operation.</returns>
+    Task DeleteByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null);
+
+    /// <summary>
+    /// Deletes multiple documents matching the filter expression.
+    /// </summary>
+    /// <param name="filterExpression">Expression to locate the documents to delete.</param>
     void DeleteMany(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Deletes multiple documents matching the filter expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">Expression to locate the documents to delete.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
     void DeleteMany(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Exclui assincronamente múltiplos documentos que correspondem à expressão de filtro.
+    /// Asynchronously deletes multiple documents matching the filter expression.
     /// </summary>
-    /// <param name="filterExpression">Expressão para localizar os documentos a serem excluídos.</param>
-    /// <returns>Uma tarefa que representa a operação de exclusão.</returns>
+    /// <param name="filterExpression">Expression to locate the documents to delete.</param>
+    /// <returns>A task representing the delete operation.</returns>
     Task DeleteManyAsync(Expression<Func<TDocument, bool>> filterExpression);
+
+    /// <summary>
+    /// Asynchronously deletes multiple documents matching the filter expression within a transaction session.
+    /// </summary>
+    /// <param name="filterExpression">Expression to locate the documents to delete.</param>
+    /// <param name="clientSessionHandle">The MongoDB client session handle.</param>
+    /// <returns>A task representing the delete operation.</returns>
     Task DeleteManyAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle);
 
     /// <summary>
-    /// Executa uma série de operações dentro de um contexto transacional do MongoDB, de forma assíncrona.
+    /// Executes a series of operations within a MongoDB transaction context asynchronously.
     /// </summary>
-    /// <typeparam name="TResult">Tipo do resultado retornado pelo corpo da transação.</typeparam>
-    /// <param name="transactionBody">Função que define as operações transacionais usando a sessão fornecida.</param>
-    /// <returns>Uma tarefa que representa a operação transacional, contendo o resultado das operações executadas.</returns>
+    /// <typeparam name="TResult">The type of result returned by the transaction body.</typeparam>
+    /// <param name="transactionBody">Function that defines the transactional operations using the provided session.</param>
+    /// <returns>A task representing the transactional operation, containing the result of the executed operations.</returns>
     Task<TResult> WithTransactionAsync<TResult>(
         Func<IClientSessionHandle, Task<TResult>> transactionBody);
 }
