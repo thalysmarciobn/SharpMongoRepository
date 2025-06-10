@@ -3,13 +3,20 @@ using API.Extensions;
 using MongoDB.Driver;
 using SharpMongoRepository;
 using SharpMongoRepository.Enum;
+using SharpMongoRepository.Extensions;
 using SharpMongoRepository.Interface;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<MongoSettings>(builder.Configuration.GetSection("Mongo"));
+var mongoConfigSection = builder.Configuration.GetSection("Mongo");
 
-builder.Services.AddMongoRepository([
+var connectionString = mongoConfigSection["ConnectionString"]
+    ?? throw new InvalidOperationException("Configuration for 'Mongo:ConnectionString' not found.");
+
+var databaseName = mongoConfigSection["Database"]
+    ?? throw new InvalidOperationException("Configuration for 'Mongo:DatabaseName' not found.");
+
+builder.Services.AddMongoRepository(connectionString, databaseName, [
     MongoDocument<WeatherForecast, Guid>.CreateAscendingIndex(x => x.Date, false),
     MongoDocument<WeatherForecast, Guid>.CreateCompoundIndex(
         unique: false,
