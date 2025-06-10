@@ -118,33 +118,33 @@ public class MongoRepositoryTests
     [Fact]
     public void FindById_ShouldReturnDocument()
     {
-        _mockRepository.Setup(x => x.FindById(_testEntity.Id))
+        _mockRepository.Setup(x => x.FindById(_testEntity.Id, null))
             .Returns(_testEntity);
 
         var result = _mockRepository.Object.FindById(_testEntity.Id);
 
         Assert.Equal(_testEntity.Id, result!.Id);
-        _mockRepository.Verify(x => x.FindById(_testEntity.Id), Times.Once);
+        _mockRepository.Verify(x => x.FindById(_testEntity.Id, null), Times.Once);
     }
 
     [Fact]
     public void InsertOne_ShouldCallRepository()
     {
-        _mockRepository.Setup(x => x.InsertOne(It.IsAny<TestEntity>()));
+        _mockRepository.Setup(x => x.InsertOne(It.IsAny<TestEntity>(), null));
 
         _mockRepository.Object.InsertOne(_testEntity);
 
-        _mockRepository.Verify(x => x.InsertOne(_testEntity), Times.Once);
+        _mockRepository.Verify(x => x.InsertOne(_testEntity, null), Times.Once);
     }
 
     [Fact]
     public void InsertMany_ShouldCallRepository()
     {
-        _mockRepository.Setup(x => x.InsertMany(It.IsAny<ICollection<TestEntity>>()));
+        _mockRepository.Setup(x => x.InsertMany(It.IsAny<ICollection<TestEntity>>(), null));
 
         _mockRepository.Object.InsertMany(_testEntities);
 
-        _mockRepository.Verify(x => x.InsertMany(_testEntities), Times.Once);
+        _mockRepository.Verify(x => x.InsertMany(_testEntities, null), Times.Once);
     }
 
     [Fact]
@@ -224,24 +224,24 @@ public class MongoRepositoryTests
     [Fact]
     public async Task FindByIdAsync_ShouldReturnDocument()
     {
-        _mockRepository.Setup(x => x.FindByIdAsync(_testEntity.Id))
+        _mockRepository.Setup(x => x.FindByIdAsync(_testEntity.Id, null))
             .ReturnsAsync(_testEntity);
 
         var result = await _mockRepository.Object.FindByIdAsync(_testEntity.Id);
 
         Assert.Equal(_testEntity.Id, result!.Id);
-        _mockRepository.Verify(x => x.FindByIdAsync(_testEntity.Id), Times.Once);
+        _mockRepository.Verify(x => x.FindByIdAsync(_testEntity.Id, null), Times.Once);
     }
 
     [Fact]
     public async Task InsertOneAsync_ShouldCallRepository()
     {
-        _mockRepository.Setup(x => x.InsertOneAsync(It.IsAny<TestEntity>()))
+        _mockRepository.Setup(x => x.InsertOneAsync(It.IsAny<TestEntity>(), null))
             .Returns(Task.CompletedTask);
 
         await _mockRepository.Object.InsertOneAsync(_testEntity);
 
-        _mockRepository.Verify(x => x.InsertOneAsync(_testEntity), Times.Once);
+        _mockRepository.Verify(x => x.InsertOneAsync(_testEntity, null), Times.Once);
     }
 
     [Fact]
@@ -340,26 +340,26 @@ public class MongoRepositoryTests
     public void FindById_ShouldReturnNullWhenNotFound()
     {
         var nonExistentId = ObjectId.GenerateNewId();
-        _mockRepository.Setup(x => x.FindById(nonExistentId))
+        _mockRepository.Setup(x => x.FindById(nonExistentId, null))
             .Returns((TestEntity)null!);
 
         var result = _mockRepository.Object.FindById(nonExistentId);
 
         Assert.Null(result);
-        _mockRepository.Verify(x => x.FindById(nonExistentId), Times.Once);
+        _mockRepository.Verify(x => x.FindById(nonExistentId, null), Times.Once);
     }
 
     [Fact]
     public async Task FindByIdAsync_ShouldReturnNullWhenNotFound()
     {
         var nonExistentId = ObjectId.GenerateNewId();
-        _mockRepository.Setup(x => x.FindByIdAsync(nonExistentId))
+        _mockRepository.Setup(x => x.FindByIdAsync(nonExistentId, null))
             .ReturnsAsync((TestEntity)null!);
 
         var result = await _mockRepository.Object.FindByIdAsync(nonExistentId);
 
         Assert.Null(result);
-        _mockRepository.Verify(x => x.FindByIdAsync(nonExistentId), Times.Once);
+        _mockRepository.Verify(x => x.FindByIdAsync(nonExistentId, null), Times.Once);
     }
 
     [Fact]
