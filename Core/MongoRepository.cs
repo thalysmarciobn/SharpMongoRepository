@@ -15,6 +15,7 @@ namespace SharpMongoRepository;
 ///     Provides a complete implementation of MongoDB CRUD operations with index support.
 /// </summary>
 /// <typeparam name="TDocument">The document type implementing IDocument.</typeparam>
+/// <typeparam name="TKey">The type of the document's primary key.</typeparam>
 /// <remarks>
 ///     <para>
 ///         Features include:
@@ -62,19 +63,11 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public MongoRepository(string connectionString, string databaseName, MongoRepositoryOptions<TDocument, TKey>? options, IIdGenerator? idGenerator = null)
     {
         _connectionString = connectionString;
-
         _databaseName = databaseName;
-
-        _collectionName = GetCollectionName(typeof(TDocument)) ??
-                          throw new RepositoryException("Collection name not specified.");
-
+        _collectionName = GetCollectionName(typeof(TDocument)) ?? throw new RepositoryException("Collection name not specified.");
         _lazyClient = new Lazy<IMongoClient>(CreateMongoClient, LazyThreadSafetyMode.ExecutionAndPublication);
-
-        _lazyCollection =
-            new Lazy<IMongoCollection<TDocument>>(InitializeCollection, LazyThreadSafetyMode.ExecutionAndPublication);
-
+        _lazyCollection = new Lazy<IMongoCollection<TDocument>>(InitializeCollection, LazyThreadSafetyMode.ExecutionAndPublication);
         _idGenerator = idGenerator ?? CreateDefaultIdGenerator();
-
         _options = options;
     }
 
@@ -87,15 +80,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// <exception cref="RepositoryException">
     /// Thrown when there is no default <see cref="IIdGenerator"/> implementation available for the specified <typeparamref name="TKey"/> type.
     /// </exception>
-    /// <remarks>
-    /// This method supports the following ID types:
-    /// <list type="bullet">
-    ///   <item><description><see cref="ObjectId"/> — returns an <see cref="ObjectIdGenerator"/>.</description></item>
-    ///   <item><description><see cref="Guid"/> — returns a <see cref="GuidIDGenerator"/>.</description></item>
-    ///   <item><description><see cref="string"/> — returns a <see cref="StringObjectIdGenerator"/>.</description></item>
-    /// </list>
-    /// If the <typeparamref name="TKey"/> type does not match any supported types, a <see cref="RepositoryException"/> is thrown.
-    /// </remarks>
     private IIdGenerator CreateDefaultIdGenerator()
     {
         if (typeof(TKey) == typeof(ObjectId))
@@ -114,7 +98,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public IFindFluent<TDocument, TDocument> Find(FilterDefinition<TDocument> filter)
     {
         var options = ApplyTimeout();
-
         return _lazyCollection.Value.Find(filter, options);
     }
 
@@ -128,7 +111,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public IEnumerable<TDocument> FilterBy(Expression<Func<TDocument, bool>> filterExpression)
     {
         var options = ApplyTimeout();
-
         return _lazyCollection.Value.Find(filterExpression, options).ToEnumerable();
     }
 
@@ -136,7 +118,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public IEnumerable<TDocument> FilterBy(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle)
     {
         var options = ApplyTimeout();
-
         return _lazyCollection.Value.Find(clientSessionHandle, filterExpression, options).ToEnumerable();
     }
 
@@ -146,7 +127,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         Expression<Func<TDocument, TProjected>> projectionExpression)
     {
         var options = ApplyTimeout();
-
         return _lazyCollection.Value.Find(filterExpression, options).Project(projectionExpression).ToEnumerable();
     }
 
@@ -157,7 +137,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         IClientSessionHandle clientSessionHandle)
     {
         var options = ApplyTimeout();
-
         return _lazyCollection.Value.Find(clientSessionHandle, filterExpression, options).Project(projectionExpression).ToEnumerable();
     }
 
@@ -165,7 +144,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public async Task<IAsyncCursor<TDocument>> AllAsync()
     {
         var options = ApplyTimeout<TDocument>();
-
         return await _lazyCollection.Value.FindAsync(Builders<TDocument>.Filter.Empty, options);
     }
 
@@ -173,7 +151,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public async Task<IAsyncCursor<TDocument>> AllAsync(IClientSessionHandle clientSessionHandle)
     {
         var options = ApplyTimeout<TDocument>();
-
         return await _lazyCollection.Value.FindAsync(clientSessionHandle, Builders<TDocument>.Filter.Empty, options);
     }
 
@@ -181,7 +158,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public TDocument FindOne(Expression<Func<TDocument, bool>> filterExpression)
     {
         var options = ApplyTimeout();
-
         return _lazyCollection.Value.Find(filterExpression, options).FirstOrDefault();
     }
 
@@ -189,7 +165,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public TDocument FindOne(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle)
     {
         var options = ApplyTimeout();
-
         return _lazyCollection.Value.Find(clientSessionHandle, filterExpression, options).FirstOrDefault();
     }
 
@@ -197,36 +172,29 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public async Task<TDocument?> FindOneAsync(Expression<Func<TDocument, bool>> filterExpression)
     {
         var options = ApplyTimeout();
-
         return await _lazyCollection.Value.Find(filterExpression, options).FirstOrDefaultAsync();
     }
 
     /// <inheritdoc />
     public async Task<TDocument?> FindOneAsync(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle)
-    {   
+    {
         var options = ApplyTimeout();
-
         return await _lazyCollection.Value.Find(clientSessionHandle, filterExpression, options).FirstOrDefaultAsync();
     }
-
 
     /// <inheritdoc />
     public TDocument? FindById(TKey id, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         var opt = options ?? ApplyTimeout();
-
-        return _lazyCollection.Value.Find(filter, options).SingleOrDefault();
+        return _lazyCollection.Value.Find(filter, opt).SingleOrDefault();
     }
 
     /// <inheritdoc />
     public TDocument? FindById(TKey id, IClientSessionHandle clientSessionHandle, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         var opt = options ?? ApplyTimeout();
-
         return _lazyCollection.Value.Find(clientSessionHandle, filter, opt).SingleOrDefault();
     }
 
@@ -234,22 +202,16 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public async Task<TDocument?> FindByIdAsync(TKey id, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         var opt = options ?? ApplyTimeout();
-
-        return await _lazyCollection.Value.Find(filter, opt)
-            .FirstOrDefaultAsync();
+        return await _lazyCollection.Value.Find(filter, opt).FirstOrDefaultAsync();
     }
 
     /// <inheritdoc />
     public async Task<TDocument?> FindByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOptions? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         var opt = options ?? ApplyTimeout();
-
-        return await _lazyCollection.Value.Find(clientSessionHandle, filter, opt)
-            .FirstOrDefaultAsync();
+        return await _lazyCollection.Value.Find(clientSessionHandle, filter, opt).FirstOrDefaultAsync();
     }
 
     /// <inheritdoc />
@@ -259,10 +221,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
 
         var writeConcern = ApplyWriteTimeout();
-
-        var collection = _lazyCollection.Value
-            .WithWriteConcern(writeConcern);
-
+        var collection = _lazyCollection.Value.WithWriteConcern(writeConcern);
         collection.InsertOne(document, options);
     }
 
@@ -273,10 +232,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
 
         var writeConcern = ApplyWriteTimeout();
-
-        var collection = _lazyCollection.Value
-            .WithWriteConcern(writeConcern);
-
+        var collection = _lazyCollection.Value.WithWriteConcern(writeConcern);
         collection.InsertOne(clientSessionHandle, document, options);
     }
 
@@ -287,10 +243,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
 
         var writeConcern = ApplyWriteTimeout();
-
-        var collection = _lazyCollection.Value
-            .WithWriteConcern(writeConcern);
-
+        var collection = _lazyCollection.Value.WithWriteConcern(writeConcern);
         await collection.InsertOneAsync(document, options);
     }
 
@@ -301,10 +254,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
             document.Id = (TKey)_idGenerator.GenerateId(null, document);
 
         var writeConcern = ApplyWriteTimeout();
-
-        var collection = _lazyCollection.Value
-            .WithWriteConcern(writeConcern);
-
+        var collection = _lazyCollection.Value.WithWriteConcern(writeConcern);
         await collection.InsertOneAsync(clientSessionHandle, document, options);
     }
 
@@ -312,91 +262,66 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public void InsertMany(ICollection<TDocument> documents, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
-
-        _lazyCollection.Value
-            .WithWriteConcern(writeConcern)
-            .InsertMany(documents, options);
+        _lazyCollection.Value.WithWriteConcern(writeConcern).InsertMany(documents, options);
     }
 
     /// <inheritdoc />
     public void InsertMany(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
-
-        _lazyCollection.Value
-            .WithWriteConcern(writeConcern)
-            .InsertMany(clientSessionHandle, documents, options);
+        _lazyCollection.Value.WithWriteConcern(writeConcern).InsertMany(clientSessionHandle, documents, options);
     }
 
     /// <inheritdoc />
     public async Task InsertManyAsync(ICollection<TDocument> documents, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
-
-        await _lazyCollection.Value
-            .WithWriteConcern(writeConcern)
-            .InsertManyAsync(documents, options);
+        await _lazyCollection.Value.WithWriteConcern(writeConcern).InsertManyAsync(documents, options);
     }
 
     /// <inheritdoc />
     public async Task InsertManyAsync(ICollection<TDocument> documents, IClientSessionHandle clientSessionHandle, InsertManyOptions? options = null)
     {
         var writeConcern = ApplyWriteTimeout();
-
-        await _lazyCollection.Value
-            .WithWriteConcern(writeConcern)
-            .InsertManyAsync(clientSessionHandle, documents, options);
+        await _lazyCollection.Value.WithWriteConcern(writeConcern).InsertManyAsync(clientSessionHandle, documents, options);
     }
 
     /// <inheritdoc />
     public async Task<long> AsyncCount(Expression<Func<TDocument, bool>> filterExpression)
     {
         var filter = Builders<TDocument>.Filter.Where(filterExpression);
-
         var options = new CountOptions { MaxTime = _options?.OperationTimeout };
-
-        return await _lazyCollection.Value
-            .CountDocumentsAsync(filter, options);
+        return await _lazyCollection.Value.CountDocumentsAsync(filter, options);
     }
 
     /// <inheritdoc />
     public async Task<long> AsyncCount(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle)
     {
         var filter = Builders<TDocument>.Filter.Where(filterExpression);
-
         var options = new CountOptions { MaxTime = _options?.OperationTimeout };
-
-        return await _lazyCollection.Value
-            .CountDocumentsAsync(clientSessionHandle, filter, options);
+        return await _lazyCollection.Value.CountDocumentsAsync(clientSessionHandle, filter, options);
     }
 
     /// <inheritdoc />
     public long Count(Expression<Func<TDocument, bool>> filterExpression)
     {
         var filter = Builders<TDocument>.Filter.Where(filterExpression);
-
         var options = new CountOptions { MaxTime = _options?.OperationTimeout };
-
-        return _lazyCollection.Value
-            .CountDocuments(filter, options);
+        return _lazyCollection.Value.CountDocuments(filter, options);
     }
 
     /// <inheritdoc />
     public long Count(Expression<Func<TDocument, bool>> filterExpression, IClientSessionHandle clientSessionHandle)
     {
         var filter = Builders<TDocument>.Filter.Where(filterExpression);
-
         var options = new CountOptions { MaxTime = _options?.OperationTimeout };
-
-        return _lazyCollection.Value
-            .CountDocuments(clientSessionHandle, filter, options);
+        return _lazyCollection.Value.CountDocuments(clientSessionHandle, filter, options);
     }
 
     /// <inheritdoc />
     public TDocument FindOneAndReplace(TDocument document, FindOneAndReplaceOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
         return _lazyCollection.Value.FindOneAndReplace(filter, document, options);
     }
 
@@ -404,40 +329,21 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public TDocument FindOneAndReplace(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
         return _lazyCollection.Value.FindOneAndReplace(clientSessionHandle, filter, document, options);
     }
 
     /// <inheritdoc />
-    public async Task<TDocument> FindOneAndReplaceAsync(TDocument document)
+    public async Task<TDocument> FindOneAndReplaceAsync(TDocument document, FindOneAndReplaceOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
-        return await _lazyCollection.Value.FindOneAndReplaceAsync(filter, document);
-    }
-
-    /// <inheritdoc />
-    public async Task<TDocument> FindOneAndReplaceAsync(TDocument document, IClientSessionHandle clientSessionHandle)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
-        return await _lazyCollection.Value.FindOneAndReplaceAsync(clientSessionHandle, filter, document);
-    }
-
-    /// <inheritdoc />
-    public async Task<TDocument> FindOneAndReplaceAsync(TDocument document, FindOneAndReplaceOptions<TDocument> options)
-    {
-        var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
         return await _lazyCollection.Value.FindOneAndReplaceAsync(filter, document, options);
     }
 
     /// <inheritdoc />
-    public async Task<TDocument> FindOneAndReplaceAsync(TDocument document, IClientSessionHandle clientSessionHandler, FindOneAndReplaceOptions<TDocument> options)
+    public async Task<TDocument> FindOneAndReplaceAsync(TDocument document, IClientSessionHandle clientSessionHandle, FindOneAndReplaceOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, document.Id);
-
-        return await _lazyCollection.Value.FindOneAndReplaceAsync(clientSessionHandler, filter, document, options);
+        return await _lazyCollection.Value.FindOneAndReplaceAsync(clientSessionHandle, filter, document, options);
     }
 
     /// <inheritdoc />
@@ -468,7 +374,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public void DeleteById(TKey id, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         _lazyCollection.Value.FindOneAndDelete(filter, options);
     }
 
@@ -476,7 +381,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public void DeleteById(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         _lazyCollection.Value.FindOneAndDelete(clientSessionHandle, filter, options);
     }
 
@@ -484,7 +388,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public async Task DeleteByIdAsync(TKey id, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         await _lazyCollection.Value.FindOneAndDeleteAsync(filter, options);
     }
 
@@ -492,7 +395,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     public async Task DeleteByIdAsync(TKey id, IClientSessionHandle clientSessionHandle, FindOneAndDeleteOptions<TDocument>? options = null)
     {
         var filter = Builders<TDocument>.Filter.Eq(doc => doc.Id, id);
-
         await _lazyCollection.Value.FindOneAndDeleteAsync(clientSessionHandle, filter, options);
     }
 
@@ -525,15 +427,12 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         Func<IClientSessionHandle, Task<TResult>> transactionBody)
     {
         using var session = await _lazyClient.Value.StartSessionAsync();
-
         session.StartTransaction();
 
         try
         {
             var result = await transactionBody(session);
-
             await session.CommitTransactionAsync();
-
             return result;
         }
         catch
@@ -548,31 +447,8 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// </summary>
     /// <returns>A new instance of <see cref="IMongoClient" />.</returns>
     /// <exception cref="RepositoryException">
-    ///     Thrown when the MongoDB client cannot be created. The exception contains:
-    ///     <list type="bullet">
-    ///         <item>
-    ///             <description>Original exception as inner exception</description>
-    ///         </item>
-    ///         <item>
-    ///             <description>Detailed error message about the failure</description>
-    ///         </item>
-    ///     </list>
+    ///     Thrown when the MongoDB client cannot be created.
     /// </exception>
-    /// <remarks>
-    ///     This method handles the following scenarios:
-    ///     <list type="bullet">
-    ///         <item>
-    ///             <description>Valid connection string format</description>
-    ///         </item>
-    ///         <item>
-    ///             <description>Network connectivity to MongoDB server</description>
-    ///         </item>
-    ///         <item>
-    ///             <description>Authentication if required</description>
-    ///         </item>
-    ///     </list>
-    ///     The client instance is configured with default settings from the connection string.
-    /// </remarks>
     private IMongoClient CreateMongoClient()
     {
         try
@@ -595,77 +471,35 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <summary>
-    /// Applies the configured operation timeout to a generic <see cref="FindOptions"/> instance.
+    /// Applies the configured operation timeout to a <see cref="FindOptions"/> instance.
     /// </summary>
     /// <param name="options">
     /// Optional existing <see cref="FindOptions"/> instance to apply the timeout to.
-    /// If null, creates a new instance.
     /// </param>
     /// <returns>
-    /// The <see cref="FindOptions"/> instance with the <see cref="FindOptions.MaxTime"/> 
-    /// set to the configured operation timeout.
+    /// The <see cref="FindOptions"/> instance with the timeout applied.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method ensures all find operations respect the global timeout configured in 
-    /// <see cref="MongoRepositoryOptions{TDocument}.OperationTimeout"/>.
-    /// </para>
-    /// <para>
-    /// When no timeout is configured in the repository options, the <see cref="FindOptions.MaxTime"/> 
-    /// will remain null, resulting in no timeout enforcement by the MongoDB driver.
-    /// </para>
-    /// <example>
-    /// Example usage:
-    /// <code>
-    /// var options = ApplyTimeout();
-    /// var cursor = await collection.FindAsync(filter, options);
-    /// </code>
-    /// </example>
-    /// </remarks>
     private FindOptions ApplyTimeout(FindOptions? options = null)
     {
         options ??= new FindOptions();
-
         options.MaxTime = _options?.OperationTimeout;
-
         return options;
     }
 
     /// <summary>
     /// Applies the configured operation timeout to a document-specific <see cref="FindOptions{TDocument}"/> instance.
     /// </summary>
-    /// <typeparam name="TDocument">The type of the MongoDB document.</typeparam>
+    /// <typeparam name="T">The type of the MongoDB document.</typeparam>
     /// <param name="options">
-    /// Optional existing <see cref="FindOptions{TDocument}"/> instance to apply the timeout to.
-    /// If null, creates a new instance.
+    /// Optional existing <see cref="FindOptions{T}"/> instance to apply the timeout to.
     /// </param>
     /// <returns>
-    /// The <see cref="FindOptions{TDocument}"/> instance with the <see cref="FindOptions{TDocument}.MaxTime"/> 
-    /// set to the configured operation timeout.
+    /// The <see cref="FindOptions{T}"/> instance with the timeout applied.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This generic version provides type-safe options configuration for document-specific queries.
-    /// </para>
-    /// <para>
-    /// The timeout behavior is identical to the non-generic <see cref="ApplyTimeout(FindOptions)"/> version.
-    /// </para>
-    /// <example>
-    /// Example usage with projection:
-    /// <code>
-    /// var options = ApplyTimeout&lt;User&gt;();
-    /// var cursor = await collection.FindAsync(
-    ///     filter, 
-    ///     options.Projection = Builders&lt;User&gt;.Projection.Include(x => x.Email));
-    /// </code>
-    /// </example>
-    /// </remarks>
-    private FindOptions<TDocument> ApplyTimeout<TDocument>(FindOptions<TDocument>? options = null)
+    private FindOptions<T> ApplyTimeout<T>(FindOptions<T>? options = null)
     {
-        options ??= new FindOptions<TDocument>();
-
+        options ??= new FindOptions<T>();
         options.MaxTime = _options?.OperationTimeout;
-
         return options;
     }
 
@@ -673,13 +507,8 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// Applies the configured operation timeout to a <see cref="WriteConcern"/> instance.
     /// </summary>
     /// <returns>
-    /// A <see cref="WriteConcern"/> with the write timeout set to the configured operation timeout
-    /// if available; otherwise, returns <see cref="WriteConcern.Acknowledged"/>.
+    /// A <see cref="WriteConcern"/> with the write timeout set to the configured operation timeout.
     /// </returns>
-    /// <remarks>
-    /// This method ensures that write operations respect a configured timeout to avoid hanging
-    /// indefinitely in case of slow or unresponsive database operations.
-    /// </remarks>
     private WriteConcern ApplyWriteTimeout()
     {
         return _options?.OperationTimeout != null
@@ -692,53 +521,14 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// </summary>
     /// <returns>An <see cref="IMongoCollection{TDocument}" /> instance for the specified document type.</returns>
     /// <exception cref="RepositoryException">
-    ///     Thrown when:
-    ///     <list type="bullet">
-    ///         <item>
-    ///             <description>The collection cannot be accessed</description>
-    ///         </item>
-    ///         <item>
-    ///             <description>Index creation fails</description>
-    ///         </item>
-    ///     </list>
-    ///     The exception contains the original error details.
+    ///     Thrown when the collection cannot be accessed or index creation fails.
     /// </exception>
-    /// <remarks>
-    ///     <para>
-    ///         This method performs the following operations:
-    ///         <list type="number">
-    ///             <item>
-    ///                 <description>Gets the database instance from the MongoDB client</description>
-    ///             </item>
-    ///             <item>
-    ///                 <description>Retrieves the specified collection</description>
-    ///             </item>
-    ///             <item>
-    ///                 <description>Creates indexes if <see cref="_options" /> contains index definitions</description>
-    ///             </item>
-    ///         </list>
-    ///     </para>
-    ///     <para>
-    ///         The collection name is determined by the <see cref="BsonCollectionAttribute" /> on the document type.
-    ///     </para>
-    ///     <para>
-    ///         Index creation is skipped if:
-    ///         <list type="bullet">
-    ///             <item>
-    ///                 <description>No options are provided (<see cref="_options" /> is null)</description>
-    ///             </item>
-    ///             <item>
-    ///                 <description>The indexes already exist in the collection</description>
-    ///             </item>
-    ///         </list>
-    ///     </para>
-    /// </remarks>
     private IMongoCollection<TDocument> InitializeCollection()
     {
         try
         {
             var collection = _lazyClient.Value.GetDatabase(_databaseName).GetCollection<TDocument>(_collectionName) ??
-                             throw new RepositoryException($"Failed to get collection '{_collectionName}'.");
+                           throw new RepositoryException($"Failed to get collection '{_collectionName}'.");
 
             if (_options is not null) CreateIndexes(collection, _options);
 
@@ -758,10 +548,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     private static string? GetCollectionName(Type documentType)
     {
         var attributes = documentType.GetCustomAttributes(typeof(BsonCollectionAttribute), true);
-
-        var bsonCollectionAttribute = attributes.FirstOrDefault() as BsonCollectionAttribute;
-
-        return bsonCollectionAttribute?.CollectionName;
+        return (attributes.FirstOrDefault() as BsonCollectionAttribute)?.CollectionName;
     }
 
     /// <summary>
@@ -778,9 +565,11 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
             .ToHashSet();
 
         foreach (var indexModel in from index in options.Indexes
-                 let indexName = index.Options.Name ?? throw new RepositoryException("Index name must be provided.")
-                 where !existingIndexNames.Contains(indexName)
-                 select new CreateIndexModel<TDocument>(index.Keys, index.Options))
+                                   let indexName = index.Options.Name ?? throw new RepositoryException("Index name must be provided.")
+                                   where !existingIndexNames.Contains(indexName)
+                                   select new CreateIndexModel<TDocument>(index.Keys, index.Options))
+        {
             collection.Indexes.CreateOne(indexModel);
+        }
     }
 }
