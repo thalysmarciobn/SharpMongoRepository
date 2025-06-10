@@ -31,6 +31,7 @@
           <PackagePath>\</PackagePath>
         </None>
         <None Include="README.md" Pack="true" PackagePath="\" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.6" />
 
         <PackageReference Include="MongoDB.Bson" Version="3.4.0" />
         <PackageReference Include="MongoDB.Driver" Version="3.4.0" />

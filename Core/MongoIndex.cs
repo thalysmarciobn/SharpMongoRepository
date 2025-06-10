@@ -4,39 +4,43 @@ using SharpMongoRepository.Interface;
 namespace SharpMongoRepository;
 
 /// <summary>
-///     Represents a MongoDB index definition for a document type.
+/// Represents a complete MongoDB index definition for a specific document type.
 /// </summary>
-/// <typeparam name="TDocument">The document type that implements <see cref="IDocument" />.</typeparam>
+/// <typeparam name="TDocument">The document type that implements <see cref="IDocument{TKey}"/>.</typeparam>
+/// <typeparam name="TKey">The type used for the document's primary key.</typeparam>
 /// <remarks>
-///     This class encapsulates both the index keys definition and creation options
-///     to provide a complete configuration for creating indexes in MongoDB.
-///     The properties are marked as required to ensure complete initialization.
+/// This class encapsulates both the index keys and creation options, providing a full
+/// configuration for creating an index in MongoDB.
+/// The properties are marked as <c>required</c> to ensure that a complete definition
+/// is provided upon initialization.
 /// </remarks>
 public class MongoIndex<TDocument, TKey> where TDocument : IDocument<TKey>
 {
     /// <summary>
-    ///     Gets the definition of the index keys.
+    /// The definition of the index keys.
     /// </summary>
     /// <value>
-    ///     The <see cref="IndexKeysDefinition{TDocument}" /> that specifies which fields to index
-    ///     and their sort order (ascending/descending).
+    /// An <see cref="IndexKeysDefinition{TDocument}"/> that specifies which fields to index
+    /// and their sort order (ascending/descending).
     /// </value>
     /// <example>
-    ///     <code>
-    /// Builders<Person>.IndexKeys.Ascending(x => x.LastName).Descending(x => x.Age)
+    /// Defining a compound index on LastName (ascending) and Age (descending):
+    /// <code>
+    /// Builders&lt;Person&gt;.IndexKeys.Ascending(x => x.LastName).Descending(x => x.Age)
     /// </code>
     /// </example>
     public required IndexKeysDefinition<TDocument> Keys { get; init; }
 
     /// <summary>
-    ///     Gets the options for creating the index.
+    /// The options for creating the index.
     /// </summary>
     /// <value>
-    ///     The <see cref="CreateIndexOptions" /> that specify additional index properties
-    ///     such as unique constraints, TTL, or custom name.
+    /// A <see cref="CreateIndexOptions"/> object that specifies additional index properties
+    /// such as unique constraints, a custom name, or a TTL (Time-To-Live).
     /// </value>
     /// <example>
-    ///     <code>
+    /// Setting options for a unique index with a custom name:
+    /// <code>
     /// new CreateIndexOptions { Unique = true, Name = "unique_email_index" }
     /// </code>
     /// </example>
