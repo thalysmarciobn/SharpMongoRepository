@@ -20,9 +20,9 @@ public class OptionsAndRegistrationTests
     {
         // The whole point: MongoRepositoryOptions used to expose init-only properties, so this delegate
         // body was a compile error (CS8852) and OperationTimeout could not be set at all.
-        var options = new MongoRepositoryOptions<Order, Guid>();
+        var options = new MongoRepositoryOptions<Order>();
 
-        Action<MongoRepositoryOptions<Order, Guid>> configure = o =>
+        Action<MongoRepositoryOptions<Order>> configure = o =>
         {
             o.OperationTimeout = TimeSpan.FromSeconds(5);
             o.WriteConcern = WriteConcern.WMajority;
@@ -47,7 +47,7 @@ public class OptionsAndRegistrationTests
     [Fact]
     public void Default_options_impose_no_timeout_and_no_concerns()
     {
-        var options = new MongoRepositoryOptions<Order, Guid>();
+        var options = new MongoRepositoryOptions<Order>();
 
         // A 30-second default used to be turned into a WriteConcern carrying only wtimeout, which
         // replaced whatever the connection string asked for.
@@ -81,7 +81,7 @@ public class OptionsAndRegistrationTests
 
         var repository = new MongoRepository<Order, Guid>(
             client.GetDatabase("test"),
-            new MongoRepositoryOptions<Order, Guid> { WriteConcern = WriteConcern.WMajority });
+            new MongoRepositoryOptions<Order> { WriteConcern = WriteConcern.WMajority });
 
         Assert.Equal(WriteConcern.WMajority.W, repository.Collection.Settings.WriteConcern.W);
     }
@@ -93,7 +93,7 @@ public class OptionsAndRegistrationTests
 
         var repository = new MongoRepository<Order, Guid>(
             client.GetDatabase("test"),
-            new MongoRepositoryOptions<Order, Guid>
+            new MongoRepositoryOptions<Order>
             {
                 ReadPreference = ReadPreference.SecondaryPreferred
             });
@@ -106,8 +106,25 @@ public class OptionsAndRegistrationTests
     [Fact]
     public void Collection_name_comes_from_the_attribute()
     {
-        Assert.Equal("orders", MongoRepository<Order, Guid>.CollectionName);
-        Assert.Equal("tickets", MongoRepository<Ticket, string>.CollectionName);
+        var database = new MongoClient(MongoClientSettings.FromConnectionString(ConnectionString))
+            .GetDatabase("test");
+
+        Assert.Equal("orders", new MongoRepository<Order, Guid>(database).CollectionName);
+        Assert.Equal("tickets", new MongoRepository<Ticket, string>(database).CollectionName);
+    }
+
+    [Fact]
+    public void Options_collection_name_overrides_the_attribute()
+    {
+        var database = new MongoClient(MongoClientSettings.FromConnectionString(ConnectionString))
+            .GetDatabase("test");
+
+        // Lets two repositories over one type point at different collections, a live one and an archive.
+        var archive = new MongoRepository<Order, Guid>(
+            database, new MongoRepositoryOptions<Order>().InCollection("orders_archive"));
+
+        Assert.Equal("orders_archive", archive.CollectionName);
+        Assert.Equal("orders_archive", archive.Collection.CollectionNamespace.CollectionName);
     }
 
     [Fact]
@@ -125,7 +142,7 @@ public class OptionsAndRegistrationTests
                                   ?? exception.InnerException as RepositoryException;
 
         Assert.NotNull(repositoryException);
-        Assert.Contains("[BsonCollection]", repositoryException.Message, StringComparison.Ordinal);
+        Assert.Contains("[BsonCollection", repositoryException.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -149,7 +166,7 @@ public class OptionsAndRegistrationTests
             ConnectionString,
             "test",
             options => options
-                .AddIndex(MongoIndexes<Order, Guid>.Ascending(x => x.CustomerEmail, unique: true)));
+                .AddIndex(MongoIndexes<Order>.Ascending(x => x.CustomerEmail, unique: true)));
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();

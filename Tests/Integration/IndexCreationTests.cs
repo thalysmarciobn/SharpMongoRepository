@@ -20,9 +20,9 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     public Task DisposeAsync() => fixture.CreateClient().DropDatabaseAsync(_database);
 
     private MongoRepository<Order, Guid> Build(
-        Action<MongoRepositoryOptions<Order, Guid>> configure)
+        Action<MongoRepositoryOptions<Order>> configure)
     {
-        var options = new MongoRepositoryOptions<Order, Guid> { IndexCreation = IndexCreationMode.FirstUse };
+        var options = new MongoRepositoryOptions<Order> { IndexCreation = IndexCreationMode.FirstUse };
         configure(options);
 
         return new MongoRepository<Order, Guid>(
@@ -40,7 +40,7 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     public async Task Configured_index_is_created_with_the_expected_name_and_keys()
     {
         var repository = Build(o => o.AddIndex(
-            MongoIndexes<Order, Guid>.Ascending(x => x.CustomerEmail, unique: true)));
+            MongoIndexes<Order>.Ascending(x => x.CustomerEmail, unique: true)));
 
         await repository.EnsureIndexesAsync();
 
@@ -57,8 +57,8 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
         // Previously both were named after the field alone, so the ensurer treated the second as already
         // present and created only one.
         var repository = Build(o => o.AddIndexes(
-            MongoIndexes<Order, Guid>.Ascending(x => x.Total),
-            MongoIndexes<Order, Guid>.Descending(x => x.Total)));
+            MongoIndexes<Order>.Ascending(x => x.Total),
+            MongoIndexes<Order>.Descending(x => x.Total)));
 
         await repository.EnsureIndexesAsync();
 
@@ -72,7 +72,7 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     public async Task Nested_field_index_is_created_on_the_full_path()
     {
         var repository = Build(o => o.AddIndex(
-            MongoIndexes<Order, Guid>.Ascending(x => x.Address!.City)));
+            MongoIndexes<Order>.Ascending(x => x.Address!.City)));
 
         await repository.EnsureIndexesAsync();
 
@@ -85,9 +85,9 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task Compound_index_keeps_its_declared_order_and_directions()
     {
-        var repository = Build(o => o.AddIndex(MongoIndexes<Order, Guid>.Compound(
-            MongoIndexes<Order, Guid>.Field(IndexDirection.Ascending, x => x.Status),
-            MongoIndexes<Order, Guid>.Field(IndexDirection.Descending, x => x.CreatedAt))));
+        var repository = Build(o => o.AddIndex(MongoIndexes<Order>.Compound(
+            MongoIndexes<Order>.Field(IndexDirection.Ascending, x => x.Status),
+            MongoIndexes<Order>.Field(IndexDirection.Descending, x => x.CreatedAt))));
 
         await repository.EnsureIndexesAsync();
 
@@ -103,7 +103,7 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     public async Task Ttl_index_carries_its_expiry()
     {
         var repository = Build(o => o.AddIndex(
-            MongoIndexes<Order, Guid>.TimeToLive(x => x.CreatedAt, TimeSpan.FromMinutes(5))));
+            MongoIndexes<Order>.TimeToLive(x => x.CreatedAt, TimeSpan.FromMinutes(5))));
 
         await repository.EnsureIndexesAsync();
 
@@ -116,7 +116,7 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     public async Task Unique_index_is_enforced_by_the_server()
     {
         var repository = Build(o => o.AddIndex(
-            MongoIndexes<Order, Guid>.Ascending(x => x.CustomerEmail, unique: true)));
+            MongoIndexes<Order>.Ascending(x => x.CustomerEmail, unique: true)));
 
         await repository.InsertOneAsync(new Order { CustomerEmail = "dup@example.com" });
 
@@ -131,7 +131,7 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task Ensure_is_idempotent_and_does_nothing_on_a_second_call()
     {
-        var repository = Build(o => o.AddIndex(MongoIndexes<Order, Guid>.Ascending(x => x.Total)));
+        var repository = Build(o => o.AddIndex(MongoIndexes<Order>.Ascending(x => x.Total)));
 
         await repository.EnsureIndexesAsync();
         var first = (await ListIndexesAsync(repository)).Count;
@@ -147,20 +147,20 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     {
         var shared = fixture.CreateClient().GetDatabase(_database);
 
-        var before = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order, Guid>
+        var before = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order>
         {
             IndexCreation = IndexCreationMode.FirstUse
-        }.AddIndex(MongoIndexes<Order, Guid>.Ascending(
+        }.AddIndex(MongoIndexes<Order>.Ascending(
             x => x.Status, configure: o => o.Name = "drifting")));
 
         await before.EnsureIndexesAsync();
 
         // Same name, different keys. A separate ensurer instance, so the "already done" cache does not
         // hide the comparison.
-        var after = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order, Guid>
+        var after = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order>
         {
             IndexCreation = IndexCreationMode.FirstUse
-        }.AddIndex(MongoIndexes<Order, Guid>.Ascending(
+        }.AddIndex(MongoIndexes<Order>.Ascending(
             x => x.Total, configure: o => o.Name = "drifting")));
 
         await after.EnsureIndexesAsync();
@@ -175,19 +175,19 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     {
         var shared = fixture.CreateClient().GetDatabase(_database);
 
-        var before = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order, Guid>
+        var before = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order>
         {
             IndexCreation = IndexCreationMode.FirstUse
-        }.AddIndex(MongoIndexes<Order, Guid>.Ascending(
+        }.AddIndex(MongoIndexes<Order>.Ascending(
             x => x.Status, configure: o => o.Name = "rebuilt")));
 
         await before.EnsureIndexesAsync();
 
-        var after = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order, Guid>
+        var after = new MongoRepository<Order, Guid>(shared, new MongoRepositoryOptions<Order>
         {
             IndexCreation = IndexCreationMode.FirstUse,
             RecreateChangedIndexes = true
-        }.AddIndex(MongoIndexes<Order, Guid>.Ascending(
+        }.AddIndex(MongoIndexes<Order>.Ascending(
             x => x.Total, configure: o => o.Name = "rebuilt")));
 
         await after.EnsureIndexesAsync();
@@ -202,8 +202,8 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     {
         var repository = new MongoRepository<Order, Guid>(
             fixture.CreateClient().GetDatabase(_database),
-            new MongoRepositoryOptions<Order, Guid> { IndexCreation = IndexCreationMode.Disabled }
-                .AddIndex(MongoIndexes<Order, Guid>.Ascending(x => x.Total)));
+            new MongoRepositoryOptions<Order> { IndexCreation = IndexCreationMode.Disabled }
+                .AddIndex(MongoIndexes<Order>.Ascending(x => x.Total)));
 
         await repository.InsertOneAsync(new Order());
         await repository.EnsureIndexesAsync();
@@ -216,7 +216,7 @@ public class IndexCreationTests(MongoFixture fixture) : IAsyncLifetime
     [Fact]
     public async Task First_use_mode_creates_indexes_before_the_first_operation_completes()
     {
-        var repository = Build(o => o.AddIndex(MongoIndexes<Order, Guid>.Ascending(x => x.Total)));
+        var repository = Build(o => o.AddIndex(MongoIndexes<Order>.Ascending(x => x.Total)));
 
         await repository.InsertOneAsync(new Order { Total = 1 });
 
