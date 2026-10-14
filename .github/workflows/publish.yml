@@ -1,101 +1,116 @@
-name: .NET CI and Publish
+name: Publish
 
 on:
   release:
-    types: [created]
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without a leading v (for example 0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 env:
-  DOTNET_VERSION: '9.0.x'
-  PACKAGE_NAME: 'SharpMongoRepository'
-  SOLUTION_FILE: 'SharpMongoRepository.sln'
-  PROJECT_PATH: 'Core/SharpMongoRepository.csproj'
-  TEST_PROJECT_PATH: 'Tests/Tests.csproj'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  PROJECT: Core/SharpMongoRepository.csproj
 
 jobs:
-  build-and-test:
+  publish:
+    name: Pack and publish
     runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-        
-    - name: Restore dependencies
-      run: dotnet restore ${{ env.SOLUTION_FILE }}
-      
-    - name: Build solution
-      run: dotnet build ${{ env.SOLUTION_FILE }} --no-restore --configuration Release
-      
-    - name: Run tests
-      run: |
-        dotnet test ${{ env.TEST_PROJECT_PATH }} \
-          --no-build \
-          --configuration Release \
-          --logger "trx" \
-          --collect:"XPlat Code Coverage" \
-          /p:CollectCoverage=true
-
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results
-        path: '**/TestResults/*.trx'
-
-    - name: Upload coverage report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: code-coverage
-        path: '**/coverage.cobertura.xml'
-
-  publish-package:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    
     permissions:
       contents: read
       packages: write
-
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-        
-    - name: Restore dependencies
-      run: dotnet restore ${{ env.SOLUTION_FILE }}
+      - uses: actions/checkout@v4
+        with:
+          # SourceLink needs the full history to resolve the commit it stamps into the symbols.
+          fetch-depth: 0
 
-    - name: Build project
-      run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
-    - name: Check if DLL exists
-      run: ls -la Core/bin/Release/net9.0 || echo "DLL not found"
+      - name: Resolve the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # Strip a leading v from the tag if there is one, so both v0.1.0 and 0.1.0 work. The old
+            # workflow gated packing on a v prefix but left the push ungated, so a tag without one
+            # skipped the pack and then failed on an empty glob.
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
 
-    - name: Create artifacts directory
-      run: mkdir -p ./artifacts
-      
-    - name: Pack the library
-      if: startsWith(github.ref, 'refs/tags/v')
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/v}
-        dotnet pack ${{ env.PROJECT_PATH }} \
-          --configuration Release \
-          --no-restore \
-          -p:Version=$VERSION \
-          -p:PackageId=${{ env.PACKAGE_NAME }} \
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a semantic version."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing $VERSION"
+
+      - name: Check the version matches the project file
+        run: |
+          DECLARED=$(grep -oP '(?<=<Version>)[^<]+' ${{ env.PROJECT }})
+          if [ "$DECLARED" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::The tag says ${{ steps.version.outputs.version }} but ${{ env.PROJECT }} declares $DECLARED. Update the project file and the changelog before tagging."
+            exit 1
+          fi
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT }} --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
+
+      - name: Unit tests
+        run: dotnet test --configuration Release --filter "Category!=Integration"
+
+      - name: Integration tests
+        run: dotnet test Tests/Tests.csproj --configuration Release --framework net10.0 --filter "Category=Integration"
+
+      - name: Pack
+        run: >
+          dotnet pack ${{ env.PROJECT }} --configuration Release --no-build
+          -p:ContinuousIntegrationBuild=true
+          -p:Version=${{ steps.version.outputs.version }}
           --output ./artifacts
-          
-    - name: Publish to GitHub Packages
-      run: dotnet nuget push "./artifacts/*.nupkg" --api-key ${{ secrets.GITHUB_TOKEN }} --source "https://nuget.pkg.github.com/thalysmarciobn/index.json"
-      
-      
-    - name: Upload package artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ env.PACKAGE_NAME }}-nupkg
-        path: ./artifacts/*.nupkg
+
+      - name: Upload the package as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SharpMongoRepository-${{ steps.version.outputs.version }}
+          path: ./artifacts/*
+
+      - name: Publish to NuGet.org
+        # The README tells people to `dotnet add package SharpMongoRepository`, so NuGet.org is the
+        # primary feed. The old workflow only pushed to GitHub Packages, which meant every NuGet.org
+        # release was being produced by hand outside CI.
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::The NUGET_API_KEY secret is not set."
+            exit 1
+          fi
+          dotnet nuget push "./artifacts/*.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: Publish to GitHub Packages
+        run: >
+          dotnet nuget push "./artifacts/*.nupkg"
+          --api-key ${{ secrets.GITHUB_TOKEN }}
+          --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+          --skip-duplicate
