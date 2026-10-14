@@ -8,6 +8,14 @@
           dropping anyone.
         -->
         <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+
+        <!--
+          Transitive pinning is off for the packaged project. With it on, a PackageVersion entry for a
+          transitive dependency is promoted into this package's own dependency list, so a pin added later
+          for a test-only package would silently appear as a dependency of the library. The other projects
+          keep pinning, because nothing they resolve is published.
+        -->
+        <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     </PropertyGroup>
 
     <PropertyGroup Label="Package">
