@@ -16,10 +16,8 @@ internal interface IMongoIndexInitializer
 }
 
 /// <inheritdoc />
-internal sealed class MongoIndexInitializer<TDocument, TKey>(IMongoRepository<TDocument, TKey> repository)
+internal sealed class MongoIndexInitializer<TDocument>(IMongoRepository<TDocument> repository)
     : IMongoIndexInitializer
-    where TDocument : IDocument<TKey>
-    where TKey : notnull
 {
     public string CollectionName => repository.Collection.CollectionNamespace.FullName;
 
