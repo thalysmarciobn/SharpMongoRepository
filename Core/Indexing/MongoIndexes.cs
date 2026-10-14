@@ -5,10 +5,9 @@ using MongoDB.Driver;
 namespace SharpMongoRepository.Indexing;
 
 /// <summary>
-///     Type-safe factory for <see cref="MongoIndex{TDocument,TKey}" /> definitions.
+///     Type-safe factory for <see cref="MongoIndex{TDocument}" /> definitions.
 /// </summary>
 /// <typeparam name="TDocument">Document type the indexes belong to.</typeparam>
-/// <typeparam name="TKey">Type of the document's primary key.</typeparam>
 /// <remarks>
 ///     <para>
 ///         Field selectors are handed to the driver's own index key builders, so nested paths and
@@ -23,18 +22,16 @@ namespace SharpMongoRepository.Indexing;
 /// </remarks>
 /// <example>
 ///     <code>
-///     MongoIndexes&lt;Order, Guid&gt;.Ascending(x =&gt; x.Customer, unique: true);
+///     MongoIndexes&lt;Order&gt;.Ascending(x =&gt; x.Customer, unique: true);
 ///
-///     MongoIndexes&lt;Order, Guid&gt;.Compound(
-///         MongoIndexes&lt;Order, Guid&gt;.Field(IndexDirection.Ascending, x =&gt; x.Customer),
-///         MongoIndexes&lt;Order, Guid&gt;.Field(IndexDirection.Descending, x =&gt; x.CreatedAt));
+///     MongoIndexes&lt;Order&gt;.Compound(
+///         MongoIndexes&lt;Order&gt;.Field(IndexDirection.Ascending, x =&gt; x.Customer),
+///         MongoIndexes&lt;Order&gt;.Field(IndexDirection.Descending, x =&gt; x.CreatedAt));
 ///
-///     MongoIndexes&lt;Order, Guid&gt;.TimeToLive(x =&gt; x.CreatedAt, TimeSpan.FromDays(30));
+///     MongoIndexes&lt;Order&gt;.TimeToLive(x =&gt; x.CreatedAt, TimeSpan.FromDays(30));
 ///     </code>
 /// </example>
-public static class MongoIndexes<TDocument, TKey>
-    where TDocument : IDocument<TKey>
-    where TKey : notnull
+public static class MongoIndexes<TDocument>
 {
     /// <summary>
     ///     Creates a single-field ascending index.
@@ -44,7 +41,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// <param name="unique">Whether the index enforces uniqueness.</param>
     /// <param name="configure">Optional hook to set further options such as sparse or a partial filter.</param>
     /// <returns>The index definition.</returns>
-    public static MongoIndex<TDocument, TKey> Ascending<TField>(
+    public static MongoIndex<TDocument> Ascending<TField>(
         Expression<Func<TDocument, TField>> field,
         bool unique = false,
         Action<CreateIndexOptions>? configure = null)
@@ -61,7 +58,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// <param name="unique">Whether the index enforces uniqueness.</param>
     /// <param name="configure">Optional hook to set further options such as sparse or a partial filter.</param>
     /// <returns>The index definition.</returns>
-    public static MongoIndex<TDocument, TKey> Descending<TField>(
+    public static MongoIndex<TDocument> Descending<TField>(
         Expression<Func<TDocument, TField>> field,
         bool unique = false,
         Action<CreateIndexOptions>? configure = null)
@@ -80,7 +77,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// </param>
     /// <returns>The index definition.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="fields" /> is empty.</exception>
-    public static MongoIndex<TDocument, TKey> Compound(
+    public static MongoIndex<TDocument> Compound(
         bool unique,
         params ReadOnlySpan<CompoundIndexField<TDocument>> fields)
         => Compound(unique, null, fields);
@@ -91,7 +88,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// <param name="fields">Fields in index order, built with <see cref="Field{TField}" />.</param>
     /// <returns>The index definition.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="fields" /> is empty.</exception>
-    public static MongoIndex<TDocument, TKey> Compound(
+    public static MongoIndex<TDocument> Compound(
         params ReadOnlySpan<CompoundIndexField<TDocument>> fields)
         => Compound(false, null, fields);
 
@@ -103,7 +100,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// <param name="fields">Fields in index order, built with <see cref="Field{TField}" />.</param>
     /// <returns>The index definition.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="fields" /> is empty.</exception>
-    public static MongoIndex<TDocument, TKey> Compound(
+    public static MongoIndex<TDocument> Compound(
         bool unique,
         Action<CreateIndexOptions>? configure,
         params ReadOnlySpan<CompoundIndexField<TDocument>> fields)
@@ -135,7 +132,7 @@ public static class MongoIndexes<TDocument, TKey>
     ///     Expiry is swept by a background task roughly every 60 seconds, so deletion is eventual rather
     ///     than immediate. A TTL index cannot be unique.
     /// </remarks>
-    public static MongoIndex<TDocument, TKey> TimeToLive<TField>(
+    public static MongoIndex<TDocument> TimeToLive<TField>(
         Expression<Func<TDocument, TField>> field,
         TimeSpan expireAfter,
         Action<CreateIndexOptions>? configure = null)
@@ -156,7 +153,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// <param name="configure">Optional hook to set weights, default language, and so on.</param>
     /// <returns>The index definition.</returns>
     /// <remarks>A collection may hold at most one text index, though it can cover several fields.</remarks>
-    public static MongoIndex<TDocument, TKey> Text<TField>(
+    public static MongoIndex<TDocument> Text<TField>(
         Expression<Func<TDocument, TField>> field,
         Action<CreateIndexOptions>? configure = null)
     {
@@ -172,7 +169,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// <param name="configure">Optional hook to set further options.</param>
     /// <returns>The index definition.</returns>
     /// <remarks>A hashed index cannot serve range queries or sorts.</remarks>
-    public static MongoIndex<TDocument, TKey> Hashed<TField>(
+    public static MongoIndex<TDocument> Hashed<TField>(
         Expression<Func<TDocument, TField>> field,
         Action<CreateIndexOptions>? configure = null)
     {
@@ -190,7 +187,7 @@ public static class MongoIndexes<TDocument, TKey>
     /// <remarks>
     ///     The name is still derived from the rendered keys unless <paramref name="configure" /> overrides it.
     /// </remarks>
-    public static MongoIndex<TDocument, TKey> Custom(
+    public static MongoIndex<TDocument> Custom(
         IndexKeysDefinition<TDocument> keys,
         bool unique = false,
         Action<CreateIndexOptions>? configure = null)
@@ -237,13 +234,13 @@ public static class MongoIndexes<TDocument, TKey>
     private static FieldDefinition<TDocument> ToField<TField>(Expression<Func<TDocument, TField>> field)
         => new ExpressionFieldDefinition<TDocument, TField>(field);
 
-    private static MongoIndex<TDocument, TKey> Build(
+    private static MongoIndex<TDocument> Build(
         IndexKeysDefinition<TDocument> keys,
         bool unique,
         Action<CreateIndexOptions>? configure)
     {
         var options = new CreateIndexOptions { Unique = unique };
-        var index = new MongoIndex<TDocument, TKey> { Keys = keys, Options = options };
+        var index = new MongoIndex<TDocument> { Keys = keys, Options = options };
 
         // Derive the name from the rendered keys so it reflects the real BSON field names and
         // directions. Done before `configure` runs, so a caller can still override it.

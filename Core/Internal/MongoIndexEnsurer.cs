@@ -34,13 +34,11 @@ internal sealed class MongoIndexEnsurer : IDisposable
     /// <summary>
     ///     Ensures the configured indexes exist, doing nothing on subsequent calls for the same collection.
     /// </summary>
-    internal Task EnsureAsync<TDocument, TKey>(
+    internal Task EnsureAsync<TDocument>(
         IMongoCollection<TDocument> collection,
-        MongoRepositoryOptions<TDocument, TKey> options,
+        MongoRepositoryOptions<TDocument> options,
         ILogger logger,
         CancellationToken cancellationToken)
-        where TDocument : IDocument<TKey>
-        where TKey : notnull
     {
         // Fast path: a completed Task is cached by the runtime, so a warm call allocates nothing.
         return IsComplete(collection, options)
@@ -49,15 +47,13 @@ internal sealed class MongoIndexEnsurer : IDisposable
     }
 
     /// <summary>
-    ///     Synchronous counterpart of <see cref="EnsureAsync{TDocument,TKey}" />.
+    ///     Synchronous counterpart of <see cref="EnsureAsync{TDocument}" />.
     /// </summary>
-    internal void Ensure<TDocument, TKey>(
+    internal void Ensure<TDocument>(
         IMongoCollection<TDocument> collection,
-        MongoRepositoryOptions<TDocument, TKey> options,
+        MongoRepositoryOptions<TDocument> options,
         ILogger logger,
         CancellationToken cancellationToken)
-        where TDocument : IDocument<TKey>
-        where TKey : notnull
     {
         if (IsComplete(collection, options))
             return;
@@ -84,22 +80,18 @@ internal sealed class MongoIndexEnsurer : IDisposable
         }
     }
 
-    private bool IsComplete<TDocument, TKey>(
+    private bool IsComplete<TDocument>(
         IMongoCollection<TDocument> collection,
-        MongoRepositoryOptions<TDocument, TKey> options)
-        where TDocument : IDocument<TKey>
-        where TKey : notnull
+        MongoRepositoryOptions<TDocument> options)
         => options.IndexCreation == IndexCreationMode.Disabled
            || options.Indexes.Count == 0
            || _completed.ContainsKey(KeyFor(collection));
 
-    private async Task EnsureSlowAsync<TDocument, TKey>(
+    private async Task EnsureSlowAsync<TDocument>(
         IMongoCollection<TDocument> collection,
-        MongoRepositoryOptions<TDocument, TKey> options,
+        MongoRepositoryOptions<TDocument> options,
         ILogger logger,
         CancellationToken cancellationToken)
-        where TDocument : IDocument<TKey>
-        where TKey : notnull
     {
         var key = KeyFor(collection);
 
@@ -137,15 +129,13 @@ internal sealed class MongoIndexEnsurer : IDisposable
     ///     <c>dropAsync</c> collects the names to drop before creating, for the asynchronous caller. When it
     ///     is <see langword="null" />, drift is dropped inline through the synchronous API instead.
     /// </remarks>
-    private static List<CreateIndexModel<TDocument>> Plan<TDocument, TKey>(
+    private static List<CreateIndexModel<TDocument>> Plan<TDocument>(
         IMongoCollection<TDocument> collection,
-        MongoRepositoryOptions<TDocument, TKey> options,
+        MongoRepositoryOptions<TDocument> options,
         List<BsonDocument> existing,
         ILogger logger,
         List<string>? dropAsync,
         CancellationToken cancellationToken)
-        where TDocument : IDocument<TKey>
-        where TKey : notnull
     {
         var byName = new Dictionary<string, BsonDocument>(existing.Count, StringComparer.Ordinal);
         foreach (var index in existing)
@@ -201,9 +191,7 @@ internal sealed class MongoIndexEnsurer : IDisposable
     ///     compared, because rendering one to compare it is not always faithful; a change to a partial filter
     ///     needs a manual drop.
     /// </remarks>
-    private static bool Matches<TDocument, TKey>(BsonDocument current, MongoIndex<TDocument, TKey> desired)
-        where TDocument : IDocument<TKey>
-        where TKey : notnull
+    private static bool Matches<TDocument>(BsonDocument current, MongoIndex<TDocument> desired)
     {
         if (current.GetValue("key", null) is not BsonDocument currentKeys)
             return false;

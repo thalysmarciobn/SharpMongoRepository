@@ -4,45 +4,75 @@ using MongoDB.Driver;
 namespace SharpMongoRepository;
 
 /// <summary>
-///     Repository over a single MongoDB collection.
+///     Repository over a single MongoDB collection, for a document type with no declared key.
 /// </summary>
-/// <typeparam name="TDocument">Document type, which must implement <see cref="IDocument{TKey}" />.</typeparam>
-/// <typeparam name="TKey">Type of the document's primary key.</typeparam>
+/// <typeparam name="TDocument">Document type. No interface or attribute has to be implemented.</typeparam>
 /// <remarks>
 ///     <para>
+///         Nothing is required of <typeparamref name="TDocument" />: it can be a type you do not own, a
+///         shared DTO, or <c>BsonDocument</c> for a collection with no fixed shape. Give the collection name
+///         through <see cref="MongoRepositoryOptions{TDocument}.CollectionName" /> or
+///         <see cref="BsonCollectionAttribute" />.
+///     </para>
+///     <para>
+///         Without a key there are no <c>ById</c> methods, and reads are expressed through filters.
+///         <see cref="Query" /> is the way to do that comfortably: it composes conditions, sorts, pages and
+///         projections into one <c>find</c> command. When your documents do have a typed key, use
+///         <see cref="IMongoRepository{TDocument,TKey}" /> instead and keep both.
+///     </para>
+///     <para>
 ///         Every asynchronous method takes a <see cref="CancellationToken" />, so a cancelled request stops
-///         waiting on the database instead of holding a connection to the end.
+///         waiting on the database instead of holding a connection to the end, and an optional
+///         <see cref="IClientSessionHandle" />, so the operation can join a transaction.
 ///     </para>
 ///     <para>
-///         Every method takes an optional <see cref="IClientSessionHandle" />. Pass the session handed to you
-///         by <see cref="WithTransactionAsync{TResult}" /> to enrol an operation in that transaction; leave it
-///         <see langword="null" /> outside a transaction.
-///     </para>
-///     <para>
-///         A small synchronous surface is kept for callers that need it, but prefer the asynchronous methods:
-///         a synchronous database call blocks a thread pool thread for the whole network round-trip.
+///         A small synchronous surface exists for callers that need it, but prefer the asynchronous methods:
+///         a synchronous database call blocks a thread pool thread for a whole network round-trip.
 ///     </para>
 /// </remarks>
-public interface IMongoRepository<TDocument, TKey>
-    where TDocument : IDocument<TKey>
-    where TKey : notnull
+public interface IMongoRepository<TDocument>
 {
     /// <summary>
     ///     Gets the underlying driver collection.
     /// </summary>
     /// <remarks>
     ///     The escape hatch for anything this interface does not cover: aggregation pipelines, change
-    ///     streams, <c>$geoNear</c>, per-call read preferences. Using it is not a defeat; wrapping the entire
-    ///     driver would be.
+    ///     streams, <c>$geoNear</c>, per-call read preferences. Using it is not a defeat; wrapping the
+    ///     entire driver would be.
     /// </remarks>
     IMongoCollection<TDocument> Collection { get; }
+
+    /// <summary>
+    ///     Gets the collection name this repository reads and writes.
+    /// </summary>
+    string CollectionName { get; }
+
+    /// <summary>
+    ///     Starts a composable query.
+    /// </summary>
+    /// <returns>An empty query matching every document, to narrow from.</returns>
+    /// <remarks>
+    ///     The main entry point for reading, and the one that does not need a key. Conditions, sorts, paging
+    ///     and projections accumulate on the builder and execute as a single <c>find</c>; nothing reaches
+    ///     the server until a terminal method is called.
+    /// </remarks>
+    /// <example>
+    ///     <code>
+    ///     var recent = await repository.Query()
+    ///         .Where(x =&gt; x.Status == "open")
+    ///         .OrderByDescending(x =&gt; x.CreatedAt)
+    ///         .Take(50)
+    ///         .ToListAsync(token);
+    ///     </code>
+    /// </example>
+    IMongoQuery<TDocument> Query();
 
     /// <summary>
     ///     Starts a fluent find over the given filter.
     /// </summary>
     /// <param name="filter">Filter definition.</param>
     /// <param name="session">Session to enrol the read in, or <see langword="null" />.</param>
-    /// <returns>A fluent find that further sorts, projects, skips or limits before executing.</returns>
+    /// <returns>The driver's fluent find.</returns>
     IFindFluent<TDocument, TDocument> Find(
         FilterDefinition<TDocument> filter,
         IClientSessionHandle? session = null);
@@ -53,25 +83,10 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="session">Session to enrol the read in, or <see langword="null" />.</param>
     /// <returns>A queryable over the collection.</returns>
     /// <remarks>
-    ///     Not every LINQ operator has a server-side translation. An untranslatable expression throws rather
-    ///     than silently fetching the collection and filtering in memory.
+    ///     Useful for grouping and aggregation. For plain reads prefer <see cref="Query" />, which cannot
+    ///     fail at run time on an untranslatable operator.
     /// </remarks>
     IQueryable<TDocument> AsQueryable(IClientSessionHandle? session = null);
-
-    /// <summary>
-    ///     Finds a document by its primary key.
-    /// </summary>
-    /// <param name="id">The key to look up.</param>
-    /// <param name="session">Session to enrol the read in, or <see langword="null" />.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The document, or <see langword="null" /> when no document has that key.</returns>
-    Task<TDocument?> FindByIdAsync(
-        TKey id,
-        IClientSessionHandle? session = null,
-        CancellationToken cancellationToken = default);
-
-    /// <inheritdoc cref="FindByIdAsync" />
-    TDocument? FindById(TKey id, IClientSessionHandle? session = null);
 
     /// <summary>
     ///     Finds the first document matching a predicate.
@@ -96,9 +111,9 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The matching documents.</returns>
     /// <remarks>
-    ///     The whole result set is buffered into the returned list. For a result set whose size you do not
-    ///     control, use <see cref="StreamAsync(Expression{Func{TDocument, bool}}?, IClientSessionHandle?, CancellationToken)" />
-    ///     or <see cref="GetPageAsync" /> instead.
+    ///     Buffers the whole result set. For a result set whose size you do not control, use
+    ///     <see cref="StreamAsync(Expression{Func{TDocument, bool}}?, IClientSessionHandle?, CancellationToken)" />
+    ///     or <see cref="Query" /> with paging.
     /// </remarks>
     Task<List<TDocument>> FilterByAsync(
         Expression<Func<TDocument, bool>> filter,
@@ -115,8 +130,8 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The projected results.</returns>
     /// <remarks>
-    ///     The projection runs on the server, so only the fields you ask for cross the wire. This is the
-    ///     cheapest read in the interface and worth reaching for whenever you do not need whole documents.
+    ///     Only the fields you ask for cross the wire, which makes this the cheapest read available
+    ///     whenever whole documents are not needed.
     /// </remarks>
     Task<List<TProjected>> FilterByAsync<TProjected>(
         Expression<Func<TDocument, bool>> filter,
@@ -143,9 +158,8 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the enumeration.</param>
     /// <returns>An asynchronous sequence of matching documents.</returns>
     /// <remarks>
-    ///     Memory stays flat regardless of how many documents match, because only the current server batch is
-    ///     held. The cursor is disposed when enumeration ends, including when you break out early or the token
-    ///     is cancelled, which the raw <see cref="IAsyncCursor{TDocument}" /> this replaced did not guarantee.
+    ///     Memory stays flat regardless of how many documents match, because only the current server batch
+    ///     is held. The cursor is released when enumeration ends, including on an early break.
     /// </remarks>
     IAsyncEnumerable<TDocument> StreamAsync(
         Expression<Func<TDocument, bool>>? filter = null,
@@ -178,6 +192,10 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The requested page.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="pageSize" /> is not positive.</exception>
+    /// <remarks>
+    ///     <see cref="Query" /> offers the same thing with a composable filter and the option to skip the
+    ///     count, which halves the round-trips.
+    /// </remarks>
     Task<PagedResult<TDocument>> GetPageAsync(
         int page,
         int pageSize,
@@ -194,8 +212,8 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns><see langword="true" /> when at least one document matches.</returns>
     /// <remarks>
-    ///     Implemented as a find limited to one document and projected down to <c>_id</c>, so the server stops
-    ///     at the first hit. Counting and comparing to zero would walk every match.
+    ///     Stops at the first match and sends back only its <c>_id</c>. Counting and comparing to zero
+    ///     would walk every match.
     /// </remarks>
     Task<bool> ExistsAsync(
         Expression<Func<TDocument, bool>> filter,
@@ -210,8 +228,8 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The number of matching documents.</returns>
     /// <remarks>
-    ///     An exact count scans the index or the collection. To count a whole collection cheaply and accept a
-    ///     possibly stale answer, use <see cref="EstimateCountAsync" />.
+    ///     An exact count scans the index or the collection. To count a whole collection cheaply and accept
+    ///     a possibly stale answer, use <see cref="EstimateCountAsync" />.
     /// </remarks>
     Task<long> CountAsync(
         Expression<Func<TDocument, bool>>? filter = null,
@@ -227,8 +245,8 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The estimated number of documents.</returns>
     /// <remarks>
-    ///     Constant time, because it does not look at documents. The figure can lag reality after an unclean
-    ///     shutdown, and it cannot be filtered or used inside a transaction.
+    ///     Constant time, because it does not look at documents. The figure can lag reality after an
+    ///     unclean shutdown, and it cannot be filtered or used inside a transaction.
     /// </remarks>
     Task<long> EstimateCountAsync(CancellationToken cancellationToken = default);
 
@@ -248,12 +266,17 @@ public interface IMongoRepository<TDocument, TKey>
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Inserts one document, generating its key when it is empty.
+    ///     Inserts one document.
     /// </summary>
-    /// <param name="document">Document to insert. Its <see cref="IDocument{TKey}.Id" /> is written back when generated.</param>
+    /// <param name="document">Document to insert.</param>
     /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A task that completes when the server has acknowledged the write.</returns>
+    /// <remarks>
+    ///     A keyless repository assigns no identifier itself. The driver still generates one for a member
+    ///     named <c>Id</c> of type <c>ObjectId</c> or <see cref="Guid" />, and the server generates an
+    ///     <c>_id</c> for anything else, so the document is always stored with one.
+    /// </remarks>
     Task InsertOneAsync(
         TDocument document,
         IClientSessionHandle? session = null,
@@ -263,7 +286,7 @@ public interface IMongoRepository<TDocument, TKey>
     void InsertOne(TDocument document, IClientSessionHandle? session = null);
 
     /// <summary>
-    ///     Inserts several documents in one command, generating keys where they are empty.
+    ///     Inserts several documents in one command.
     /// </summary>
     /// <param name="documents">Documents to insert.</param>
     /// <param name="ordered">
@@ -284,58 +307,39 @@ public interface IMongoRepository<TDocument, TKey>
     void InsertMany(IEnumerable<TDocument> documents, bool ordered = true, IClientSessionHandle? session = null);
 
     /// <summary>
-    ///     Replaces the document with the same key as <paramref name="document" />.
+    ///     Replaces the first document matching a predicate.
     /// </summary>
-    /// <param name="document">Replacement document; its key selects the target.</param>
-    /// <param name="upsert">When <see langword="true" />, insert the document if no match exists.</param>
+    /// <param name="filter">Predicate selecting the document to replace.</param>
+    /// <param name="replacement">Replacement document.</param>
+    /// <param name="upsert">When <see langword="true" />, insert the replacement if nothing matches.</param>
     /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The result, carrying matched and modified counts.</returns>
     /// <remarks>
-    ///     This overwrites every field. To change a few fields without sending the rest, and without losing a
-    ///     concurrent writer's changes to other fields, use <see cref="UpdateByIdAsync" />.
+    ///     Overwrites every field. To change a few fields without sending the rest, and without discarding
+    ///     a concurrent writer's changes to other fields, use <see cref="UpdateOneAsync" />.
     /// </remarks>
     Task<ReplaceOneResult> ReplaceOneAsync(
-        TDocument document,
+        Expression<Func<TDocument, bool>> filter,
+        TDocument replacement,
         bool upsert = false,
         IClientSessionHandle? session = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Replaces the document with the same key and returns one version of it.
+    ///     Replaces the first document matching a predicate and returns one version of it.
     /// </summary>
-    /// <param name="document">Replacement document; its key selects the target.</param>
+    /// <param name="filter">Predicate selecting the document to replace.</param>
+    /// <param name="replacement">Replacement document.</param>
     /// <param name="returnDocument">Whether to return the document before or after replacement.</param>
-    /// <param name="upsert">When <see langword="true" />, insert the document if no match exists.</param>
+    /// <param name="upsert">When <see langword="true" />, insert the replacement if nothing matches.</param>
     /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The requested version of the document, or <see langword="null" /> when nothing matched.</returns>
     Task<TDocument?> FindOneAndReplaceAsync(
-        TDocument document,
+        Expression<Func<TDocument, bool>> filter,
+        TDocument replacement,
         ReturnDocument returnDocument = ReturnDocument.After,
-        bool upsert = false,
-        IClientSessionHandle? session = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    ///     Applies a partial update to the document with the given key.
-    /// </summary>
-    /// <param name="id">Key of the document to update.</param>
-    /// <param name="update">Update definition, built with <c>Builders&lt;TDocument&gt;.Update</c>.</param>
-    /// <param name="upsert">When <see langword="true" />, create the document if it does not exist.</param>
-    /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The result, carrying matched and modified counts.</returns>
-    /// <example>
-    ///     <code>
-    ///     await repo.UpdateByIdAsync(id, Builders&lt;Order&gt;.Update
-    ///         .Set(x =&gt; x.Status, OrderStatus.Shipped)
-    ///         .Inc(x =&gt; x.Revision, 1));
-    ///     </code>
-    /// </example>
-    Task<UpdateResult> UpdateByIdAsync(
-        TKey id,
-        UpdateDefinition<TDocument> update,
         bool upsert = false,
         IClientSessionHandle? session = null,
         CancellationToken cancellationToken = default);
@@ -344,7 +348,7 @@ public interface IMongoRepository<TDocument, TKey>
     ///     Applies a partial update to the first document matching a predicate.
     /// </summary>
     /// <param name="filter">Predicate selecting the document.</param>
-    /// <param name="update">Update definition.</param>
+    /// <param name="update">Update definition, built with <c>Builders&lt;TDocument&gt;.Update</c>.</param>
     /// <param name="upsert">When <see langword="true" />, create the document if nothing matches.</param>
     /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
@@ -372,7 +376,7 @@ public interface IMongoRepository<TDocument, TKey>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The result, carrying matched and modified counts.</returns>
     /// <remarks>
-    ///     One command regardless of how many documents match: the documents are never fetched into the
+    ///     One command regardless of how many documents match, and the documents are never fetched into the
     ///     client. This is the right way to apply the same change in bulk.
     /// </remarks>
     Task<UpdateResult> UpdateManyAsync(
@@ -402,26 +406,6 @@ public interface IMongoRepository<TDocument, TKey>
         bool upsert = false,
         IClientSessionHandle? session = null,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    ///     Deletes the document with the given key.
-    /// </summary>
-    /// <param name="id">Key of the document to delete.</param>
-    /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>The number of documents deleted: 0 or 1.</returns>
-    /// <remarks>
-    ///     Returns a count so the caller can tell a successful delete from a no-op. The previous version
-    ///     returned <see langword="void" /> and was implemented with <c>findOneAndDelete</c>, which fetched
-    ///     the whole document over the wire only to discard it.
-    /// </remarks>
-    Task<long> DeleteByIdAsync(
-        TKey id,
-        IClientSessionHandle? session = null,
-        CancellationToken cancellationToken = default);
-
-    /// <inheritdoc cref="DeleteByIdAsync" />
-    long DeleteById(TKey id, IClientSessionHandle? session = null);
 
     /// <summary>
     ///     Deletes the first document matching a predicate.
@@ -495,8 +479,8 @@ public interface IMongoRepository<TDocument, TKey>
     /// </summary>
     /// <typeparam name="TResult">Type the unit of work returns.</typeparam>
     /// <param name="body">
-    ///     The unit of work. It receives the session, which it must pass to every repository call that should
-    ///     take part in the transaction. It may run more than once, so it must be idempotent in its
+    ///     The unit of work. It receives the session, which it must pass to every repository call that
+    ///     should take part in the transaction. It may run more than once, so it must be idempotent in its
     ///     non-database side effects.
     /// </param>
     /// <param name="transactionOptions">Read concern, write concern and read preference for the transaction.</param>
@@ -505,18 +489,15 @@ public interface IMongoRepository<TDocument, TKey>
     /// <remarks>
     ///     <para>
     ///         Delegates to the driver's own transaction runner, which retries the body on
-    ///         <c>TransientTransactionError</c> and retries the commit on <c>UnknownTransactionCommitResult</c>.
-    ///         The previous version committed once and aborted on any exception, so a transaction lost to a
-    ///         primary step-down surfaced as a hard failure instead of being retried.
+    ///         <c>TransientTransactionError</c> and retries the commit on
+    ///         <c>UnknownTransactionCommitResult</c>.
     ///     </para>
     ///     <para>
     ///         Transactions require a replica set or a sharded cluster; they are not available on a
-    ///         standalone server.
-    ///     </para>
-    ///     <para>
-    ///         To span several collections, start a session with <see cref="StartSessionAsync" /> and pass it
-    ///         to each repository. All repositories registered against the same connection string share one
-    ///         <see cref="IMongoClient" />, which is what makes that possible.
+    ///         standalone server. To span several collections, start a session with
+    ///         <see cref="StartSessionAsync" /> and pass it to each repository: all repositories registered
+    ///         against the same connection string share one <see cref="IMongoClient" />, which is what makes
+    ///         that possible.
     ///     </para>
     /// </remarks>
     Task<TResult> WithTransactionAsync<TResult>(
@@ -554,4 +535,120 @@ public interface IMongoRepository<TDocument, TKey>
     ///     again; after the first success it returns a cached completed task.
     /// </remarks>
     Task EnsureIndexesAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+///     Repository over a single MongoDB collection, for a document type with a typed primary key.
+/// </summary>
+/// <typeparam name="TDocument">Document type, which must implement <see cref="IDocument{TKey}" />.</typeparam>
+/// <typeparam name="TKey">Type of the document's primary key.</typeparam>
+/// <remarks>
+///     Adds key-based operations to <see cref="IMongoRepository{TDocument}" /> and generates an identifier on
+///     insert when the document's key is still empty. Everything the keyless interface offers,
+///     <see cref="IMongoRepository{TDocument}.Query" /> included, is available here too.
+/// </remarks>
+public interface IMongoRepository<TDocument, TKey> : IMongoRepository<TDocument>
+    where TDocument : IDocument<TKey>
+    where TKey : notnull
+{
+    /// <summary>
+    ///     Finds a document by its primary key.
+    /// </summary>
+    /// <param name="id">The key to look up.</param>
+    /// <param name="session">Session to enrol the read in, or <see langword="null" />.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The document, or <see langword="null" /> when no document has that key.</returns>
+    Task<TDocument?> FindByIdAsync(
+        TKey id,
+        IClientSessionHandle? session = null,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="FindByIdAsync" />
+    TDocument? FindById(TKey id, IClientSessionHandle? session = null);
+
+    /// <summary>
+    ///     Replaces the document with the same key as <paramref name="document" />.
+    /// </summary>
+    /// <param name="document">Replacement document; its key selects the target.</param>
+    /// <param name="upsert">When <see langword="true" />, insert the document if no match exists.</param>
+    /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The result, carrying matched and modified counts.</returns>
+    /// <remarks>
+    ///     Overwrites every field. To change a few fields without sending the rest, use
+    ///     <see cref="UpdateByIdAsync" />.
+    /// </remarks>
+    Task<ReplaceOneResult> ReplaceOneAsync(
+        TDocument document,
+        bool upsert = false,
+        IClientSessionHandle? session = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Replaces the document with the same key and returns one version of it.
+    /// </summary>
+    /// <param name="document">Replacement document; its key selects the target.</param>
+    /// <param name="returnDocument">Whether to return the document before or after replacement.</param>
+    /// <param name="upsert">When <see langword="true" />, insert the document if no match exists.</param>
+    /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The requested version of the document, or <see langword="null" /> when nothing matched.</returns>
+    Task<TDocument?> FindOneAndReplaceAsync(
+        TDocument document,
+        ReturnDocument returnDocument = ReturnDocument.After,
+        bool upsert = false,
+        IClientSessionHandle? session = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Applies a partial update to the document with the given key.
+    /// </summary>
+    /// <param name="id">Key of the document to update.</param>
+    /// <param name="update">Update definition, built with <c>Builders&lt;TDocument&gt;.Update</c>.</param>
+    /// <param name="upsert">When <see langword="true" />, create the document if it does not exist.</param>
+    /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The result, carrying matched and modified counts.</returns>
+    /// <example>
+    ///     <code>
+    ///     await repository.UpdateByIdAsync(id, Builders&lt;Order&gt;.Update
+    ///         .Set(x =&gt; x.Status, OrderStatus.Shipped)
+    ///         .Inc(x =&gt; x.Revision, 1));
+    ///     </code>
+    /// </example>
+    Task<UpdateResult> UpdateByIdAsync(
+        TKey id,
+        UpdateDefinition<TDocument> update,
+        bool upsert = false,
+        IClientSessionHandle? session = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Deletes the document with the given key.
+    /// </summary>
+    /// <param name="id">Key of the document to delete.</param>
+    /// <param name="session">Session to enrol the write in, or <see langword="null" />.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The number of documents deleted: 0 or 1.</returns>
+    /// <remarks>
+    ///     Returns a count so the caller can tell a successful delete from a no-op, with no preceding read.
+    /// </remarks>
+    Task<long> DeleteByIdAsync(
+        TKey id,
+        IClientSessionHandle? session = null,
+        CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="DeleteByIdAsync" />
+    long DeleteById(TKey id, IClientSessionHandle? session = null);
+
+    /// <summary>
+    ///     Starts a composable query already narrowed to one key.
+    /// </summary>
+    /// <param name="id">The key to match.</param>
+    /// <returns>A query matching at most one document.</returns>
+    /// <remarks>
+    ///     For reading part of a document by key: <c>QueryById(id).FirstOrDefaultAsync(x =&gt; x.Status)</c>
+    ///     fetches one field instead of the whole document.
+    /// </remarks>
+    IMongoQuery<TDocument> QueryById(TKey id);
 }

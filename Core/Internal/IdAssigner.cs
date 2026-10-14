@@ -33,7 +33,7 @@ internal static class IdAssigner<TDocument, TKey>
     /// </summary>
     /// <param name="document">The document about to be inserted.</param>
     /// <param name="configured">
-    ///     A generator supplied through <see cref="MongoRepositoryOptions{TDocument,TKey}.IdGenerator" />,
+    ///     A generator supplied through <see cref="MongoRepositoryOptions{TDocument}.IdGenerator" />,
     ///     or <see langword="null" /> to use the default for <typeparamref name="TKey" />.
     /// </param>
     internal static void Assign(TDocument document, IIdGenerator? configured)
@@ -51,7 +51,7 @@ internal static class IdAssigner<TDocument, TKey>
     /// </summary>
     /// <param name="documents">The documents about to be inserted.</param>
     /// <param name="configured">
-    ///     A generator supplied through <see cref="MongoRepositoryOptions{TDocument,TKey}.IdGenerator" />,
+    ///     A generator supplied through <see cref="MongoRepositoryOptions{TDocument}.IdGenerator" />,
     ///     or <see langword="null" /> to use the default for <typeparamref name="TKey" />.
     /// </param>
     /// <remarks>

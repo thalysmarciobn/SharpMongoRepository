@@ -4,68 +4,60 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using SharpMongoRepository.Internal;
+using SharpMongoRepository.Querying;
 
 namespace SharpMongoRepository;
 
 /// <summary>
-///     Default <see cref="IMongoRepository{TDocument,TKey}" /> implementation.
+///     Default <see cref="IMongoRepository{TDocument}" /> implementation, for a document type with no
+///     declared key.
 /// </summary>
-/// <typeparam name="TDocument">Document type, which must implement <see cref="IDocument{TKey}" />.</typeparam>
-/// <typeparam name="TKey">Type of the document's primary key.</typeparam>
+/// <typeparam name="TDocument">Document type. No interface or attribute has to be implemented.</typeparam>
 /// <remarks>
 ///     <para>
-///         The type is cheap to construct: it resolves nothing and opens nothing. The collection name and the
-///         <c>_id</c> field definition live in <c>static readonly</c> fields, so the runtime initialises them
-///         once per closed generic type; the attribute reflection and the key expression tree are each built
-///         a single time rather than per instance or per call.
+///         Cheap to construct: it resolves nothing and opens nothing. The collection name from
+///         <see cref="BsonCollectionAttribute" /> is cached in a <c>static readonly</c> field of the closed
+///         generic type, so the attribute reflection happens once per document type for the lifetime of the
+///         process rather than per instance.
 ///     </para>
 ///     <para>
-///         It holds no unmanaged resources and is not disposable. The <see cref="IMongoClient" /> owns the
+///         Holds no unmanaged resources and is not disposable. The <see cref="IMongoClient" /> owns the
 ///         connection pool and is meant to outlive every repository built over it, which is why the
 ///         dependency-injection registration makes it a singleton.
 ///     </para>
+///     <para>
+///         Not sealed, because <see cref="MongoRepository{TDocument,TKey}" /> derives from it to add the
+///         key-based operations.
+///     </para>
 /// </remarks>
-public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocument, TKey>
-    where TDocument : IDocument<TKey>
-    where TKey : notnull
+public class MongoRepository<TDocument> : IMongoRepository<TDocument>
 {
     /// <summary>
-    ///     Collection name from <see cref="BsonCollectionAttribute" />, resolved once per closed generic type.
+    ///     Collection name declared by <see cref="BsonCollectionAttribute" />, or <see langword="null" />
+    ///     when the type carries no such attribute. Resolved once per closed generic type.
     /// </summary>
-    public static string CollectionName { get; } = ResolveCollectionName();
+    private static readonly string? AttributeCollectionName = ResolveAttributeCollectionName();
 
     /// <summary>
-    ///     Selector for the primary key, built once per closed generic type.
+    ///     Filter builder for this document type.
     /// </summary>
-    /// <remarks>
-    ///     The previous version called <c>Builders&lt;TDocument&gt;.Filter.Eq(doc =&gt; doc.Id, id)</c> inside
-    ///     every key-based method. An expression tree is constructed afresh on each evaluation of such a
-    ///     lambda, so that allocated a new tree per call; hoisting it into a <c>static readonly</c> field
-    ///     builds it exactly once.
-    /// </remarks>
-    private static readonly Expression<Func<TDocument, TKey>> IdSelector = document => document.Id;
+    protected static readonly FilterDefinitionBuilder<TDocument> Filters = Builders<TDocument>.Filter;
 
     /// <summary>
-    ///     The primary key field.
+    ///     Cached delegate handed to each query, so starting one allocates no closure.
     /// </summary>
-    /// <remarks>
-    ///     Deliberately an expression field definition rather than the string <c>"_id"</c>. A string field
-    ///     definition resolves no member, so it serialises the value with the registry's default serializer
-    ///     for <typeparamref name="TKey" />; for a <see cref="Guid" /> key that throws
-    ///     (<c>GuidSerializer cannot serialize a Guid when GuidRepresentation is Unspecified</c>), and a key
-    ///     carrying <c>[BsonRepresentation(BsonType.String)]</c> would be matched against the wrong BSON
-    ///     type. Going through the expression lets the driver resolve the member's own serializer.
-    /// </remarks>
-    private static readonly FieldDefinition<TDocument, TKey> IdField =
-        new ExpressionFieldDefinition<TDocument, TKey>(IdSelector);
-
-    private static readonly FilterDefinitionBuilder<TDocument> Filters = Builders<TDocument>.Filter;
+    private readonly Func<CancellationToken, Task> _ensureIndexesAsync;
 
     private readonly MongoIndexEnsurer _ensurer;
     private readonly ILogger _logger;
-    private readonly MongoRepositoryOptions<TDocument, TKey> _options;
+
+    /// <summary>
+    ///     Gets the options this repository was configured with.
+    /// </summary>
+    protected MongoRepositoryOptions<TDocument> Options { get; }
 
     /// <summary>
     ///     Initializes a repository over a database you already have.
@@ -75,7 +67,9 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// <param name="logger">Logger for index diagnostics, or <see langword="null" /> to discard them.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="database" /> is null.</exception>
     /// <exception cref="RepositoryException">
-    ///     Thrown when <typeparamref name="TDocument" /> carries no <see cref="BsonCollectionAttribute" />.
+    ///     Thrown when no collection name is available from either
+    ///     <see cref="MongoRepositoryOptions{TDocument}.CollectionName" /> or
+    ///     <see cref="BsonCollectionAttribute" />.
     /// </exception>
     /// <remarks>
     ///     Prefer this overload. Passing in the database lets the caller decide how the
@@ -83,7 +77,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// </remarks>
     public MongoRepository(
         IMongoDatabase database,
-        MongoRepositoryOptions<TDocument, TKey>? options = null,
+        MongoRepositoryOptions<TDocument>? options = null,
         ILogger? logger = null)
         : this(database, options, logger, new MongoIndexEnsurer())
     {
@@ -102,14 +96,14 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// <exception cref="RepositoryException">Thrown when the connection string cannot be parsed.</exception>
     /// <remarks>
     ///     Convenience for console applications and tests. Each call builds an <see cref="IMongoClient" />;
-    ///     the driver shares the underlying cluster between clients built from equal settings, but in a hosted
-    ///     application register the repository through <c>AddMongoRepository</c> instead, so the client is an
-    ///     explicit singleton.
+    ///     the driver shares the underlying cluster between clients built from equal settings, but in a
+    ///     hosted application register the repository through <c>AddMongoRepository</c> instead, so the
+    ///     client is an explicit singleton.
     /// </remarks>
     public MongoRepository(
         string connectionString,
         string databaseName,
-        MongoRepositoryOptions<TDocument, TKey>? options = null,
+        MongoRepositoryOptions<TDocument>? options = null,
         ILogger? logger = null)
         : this(
             CreateDatabase(connectionString, databaseName, options),
@@ -121,33 +115,47 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
 
     internal MongoRepository(
         IMongoDatabase database,
-        MongoRepositoryOptions<TDocument, TKey>? options,
+        MongoRepositoryOptions<TDocument>? options,
         ILogger? logger,
         MongoIndexEnsurer ensurer)
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(ensurer);
 
-        _options = options ?? new MongoRepositoryOptions<TDocument, TKey>();
+        Options = options ?? new MongoRepositoryOptions<TDocument>();
         _logger = logger ?? NullLogger.Instance;
         _ensurer = ensurer;
+        _ensureIndexesAsync = EnsureIndexesAsync;
+
+        CollectionName = ResolveCollectionName(Options);
+
+        if (Options.IgnoreExtraElements)
+            ConfigureIgnoreExtraElements();
 
         var collection = database.GetCollection<TDocument>(CollectionName);
 
         // Only override what was explicitly configured, so a write concern, read concern or read
         // preference set on the connection string survives untouched.
-        if (_options.WriteConcern is not null)
-            collection = collection.WithWriteConcern(_options.WriteConcern);
-        if (_options.ReadConcern is not null)
-            collection = collection.WithReadConcern(_options.ReadConcern);
-        if (_options.ReadPreference is not null)
-            collection = collection.WithReadPreference(_options.ReadPreference);
+        if (Options.WriteConcern is not null)
+            collection = collection.WithWriteConcern(Options.WriteConcern);
+        if (Options.ReadConcern is not null)
+            collection = collection.WithReadConcern(Options.ReadConcern);
+        if (Options.ReadPreference is not null)
+            collection = collection.WithReadPreference(Options.ReadPreference);
 
         Collection = collection;
     }
 
     /// <inheritdoc />
     public IMongoCollection<TDocument> Collection { get; }
+
+    /// <inheritdoc />
+    public string CollectionName { get; }
+
+    /// <inheritdoc />
+    public IMongoQuery<TDocument> Query()
+        => new MongoQuery<TDocument>(
+            Collection, _ensureIndexesAsync, Options.OperationTimeout, Options.BatchSize, null);
 
     /// <inheritdoc />
     public IFindFluent<TDocument, TDocument> Find(
@@ -164,29 +172,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     {
         EnsureIndexes(CancellationToken.None);
         return session is null ? Collection.AsQueryable() : Collection.AsQueryable(session);
-    }
-
-    /// <inheritdoc />
-    public async Task<TDocument?> FindByIdAsync(
-        TKey id,
-        IClientSessionHandle? session = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(id);
-        await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
-
-        return await FindCore(Filters.Eq(IdField, id), session)
-            .Limit(1)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public TDocument? FindById(TKey id, IClientSessionHandle? session = null)
-    {
-        ArgumentNullException.ThrowIfNull(id);
-        EnsureIndexes(CancellationToken.None);
-        return FindCore(Filters.Eq(IdField, id), session).Limit(1).FirstOrDefault();
     }
 
     /// <inheritdoc />
@@ -320,7 +305,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
 
         var definition = ToFilter(filter);
-
         var total = await CountCore(definition, session, cancellationToken).ConfigureAwait(false);
 
         var fluent = FindCore(definition, session);
@@ -381,7 +365,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     /// <inheritdoc />
     public Task<long> EstimateCountAsync(CancellationToken cancellationToken = default)
     {
-        var options = _options.OperationTimeout is { } timeout
+        var options = Options.OperationTimeout is { } timeout
             ? new EstimatedDocumentCountOptions { MaxTime = timeout }
             : null;
 
@@ -399,7 +383,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
 
         var definition = ToFilter(filter);
-        var options = _options.OperationTimeout is { } timeout
+        var options = Options.OperationTimeout is { } timeout
             ? new DistinctOptions { MaxTime = timeout }
             : null;
 
@@ -424,7 +408,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         ArgumentNullException.ThrowIfNull(document);
         await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
 
-        IdAssigner<TDocument, TKey>.Assign(document, _options.IdGenerator);
+        AssignIdentifier(document);
 
         if (session is null)
             await Collection.InsertOneAsync(document, null, cancellationToken).ConfigureAwait(false);
@@ -439,7 +423,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         ArgumentNullException.ThrowIfNull(document);
         EnsureIndexes(CancellationToken.None);
 
-        IdAssigner<TDocument, TKey>.Assign(document, _options.IdGenerator);
+        AssignIdentifier(document);
 
         if (session is null)
             Collection.InsertOne(document);
@@ -457,13 +441,13 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         ArgumentNullException.ThrowIfNull(documents);
         await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
 
-        // Materialise once: the sequence is walked to assign keys and again by the driver, and a lazy
+        // Materialise once: the sequence may be walked to assign keys and again by the driver, and a lazy
         // sequence would otherwise be enumerated twice.
         var batch = documents as IList<TDocument> ?? [.. documents];
         if (batch.Count == 0)
             return;
 
-        IdAssigner<TDocument, TKey>.Assign(batch, _options.IdGenerator);
+        AssignIdentifiers(batch);
 
         var options = new InsertManyOptions { IsOrdered = ordered };
 
@@ -487,7 +471,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         if (batch.Count == 0)
             return;
 
-        IdAssigner<TDocument, TKey>.Assign(batch, _options.IdGenerator);
+        AssignIdentifiers(batch);
 
         var options = new InsertManyOptions { IsOrdered = ordered };
 
@@ -498,69 +482,32 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <inheritdoc />
-    public async Task<ReplaceOneResult> ReplaceOneAsync(
-        TDocument document,
+    public Task<ReplaceOneResult> ReplaceOneAsync(
+        Expression<Func<TDocument, bool>> filter,
+        TDocument replacement,
         bool upsert = false,
         IClientSessionHandle? session = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(document);
-        await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
-
-        if (upsert)
-            IdAssigner<TDocument, TKey>.Assign(document, _options.IdGenerator);
-
-        var filter = Filters.Eq(IdField, document.Id);
-        var options = new ReplaceOptions { IsUpsert = upsert };
-
-        return session is null
-            ? await Collection.ReplaceOneAsync(filter, document, options, cancellationToken)
-                .ConfigureAwait(false)
-            : await Collection.ReplaceOneAsync(session, filter, document, options, cancellationToken)
-                .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(replacement);
+        return ReplaceOneCoreAsync(
+            Filters.Where(filter), replacement, upsert, session, cancellationToken);
     }
 
     /// <inheritdoc />
-    public async Task<TDocument?> FindOneAndReplaceAsync(
-        TDocument document,
+    public Task<TDocument?> FindOneAndReplaceAsync(
+        Expression<Func<TDocument, bool>> filter,
+        TDocument replacement,
         ReturnDocument returnDocument = ReturnDocument.After,
         bool upsert = false,
         IClientSessionHandle? session = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(document);
-        await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
-
-        if (upsert)
-            IdAssigner<TDocument, TKey>.Assign(document, _options.IdGenerator);
-
-        var filter = Filters.Eq(IdField, document.Id);
-        var options = new FindOneAndReplaceOptions<TDocument>
-        {
-            ReturnDocument = returnDocument,
-            IsUpsert = upsert,
-            MaxTime = _options.OperationTimeout
-        };
-
-        return session is null
-            ? await Collection.FindOneAndReplaceAsync(filter, document, options, cancellationToken)
-                .ConfigureAwait(false)
-            : await Collection
-                .FindOneAndReplaceAsync(session, filter, document, options, cancellationToken)
-                .ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public Task<UpdateResult> UpdateByIdAsync(
-        TKey id,
-        UpdateDefinition<TDocument> update,
-        bool upsert = false,
-        IClientSessionHandle? session = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(id);
-        ArgumentNullException.ThrowIfNull(update);
-        return UpdateOneCoreAsync(Filters.Eq(IdField, id), update, upsert, session, cancellationToken);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(replacement);
+        return FindOneAndReplaceCoreAsync(
+            Filters.Where(filter), replacement, returnDocument, upsert, session, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -633,7 +580,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         {
             ReturnDocument = returnDocument,
             IsUpsert = upsert,
-            MaxTime = _options.OperationTimeout
+            MaxTime = Options.OperationTimeout
         };
 
         return session is null
@@ -642,23 +589,6 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
             : await Collection
                 .FindOneAndUpdateAsync(session, definition, update, options, cancellationToken)
                 .ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public Task<long> DeleteByIdAsync(
-        TKey id,
-        IClientSessionHandle? session = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(id);
-        return DeleteOneCoreAsync(Filters.Eq(IdField, id), session, cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public long DeleteById(TKey id, IClientSessionHandle? session = null)
-    {
-        ArgumentNullException.ThrowIfNull(id);
-        return DeleteOneCore(Filters.Eq(IdField, id), session);
     }
 
     /// <inheritdoc />
@@ -722,7 +652,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
 
         var definition = Filters.Where(filter);
-        var options = new FindOneAndDeleteOptions<TDocument> { MaxTime = _options.OperationTimeout };
+        var options = new FindOneAndDeleteOptions<TDocument> { MaxTime = Options.OperationTimeout };
 
         return session is null
             ? await Collection.FindOneAndDeleteAsync(definition, options, cancellationToken)
@@ -795,12 +725,46 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
 
     /// <inheritdoc />
     public Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
-        => _ensurer.EnsureAsync(Collection, _options, _logger, cancellationToken);
+        => _ensurer.EnsureAsync(Collection, Options, _logger, cancellationToken);
 
-    private void EnsureIndexes(CancellationToken cancellationToken)
-        => _ensurer.Ensure(Collection, _options, _logger, cancellationToken);
+    /// <summary>
+    ///     Assigns a generated identifier to one document before insert.
+    /// </summary>
+    /// <param name="document">Document about to be inserted.</param>
+    /// <remarks>
+    ///     Does nothing here, because a keyless document has no key this type knows how to reach.
+    ///     <see cref="MongoRepository{TDocument,TKey}" /> overrides it.
+    /// </remarks>
+    protected virtual void AssignIdentifier(TDocument document)
+    {
+    }
 
-    private IFindFluent<TDocument, TDocument> FindCore(
+    /// <summary>
+    ///     Assigns generated identifiers to a batch before insert.
+    /// </summary>
+    /// <param name="documents">Documents about to be inserted.</param>
+    /// <remarks>
+    ///     Does nothing here. <see cref="MongoRepository{TDocument,TKey}" /> overrides it, and must, because
+    ///     the driver registers no identifier generator for a <see cref="string" /> key.
+    /// </remarks>
+    protected virtual void AssignIdentifiers(IList<TDocument> documents)
+    {
+    }
+
+    /// <summary>
+    ///     Ensures the configured indexes exist, synchronously.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    protected void EnsureIndexes(CancellationToken cancellationToken)
+        => _ensurer.Ensure(Collection, Options, _logger, cancellationToken);
+
+    /// <summary>
+    ///     Builds a fluent find carrying the configured server-side timeout and batch size.
+    /// </summary>
+    /// <param name="filter">Filter to apply.</param>
+    /// <param name="session">Session to enrol the read in, or <see langword="null" />.</param>
+    /// <returns>The configured fluent find.</returns>
+    protected IFindFluent<TDocument, TDocument> FindCore(
         FilterDefinition<TDocument> filter,
         IClientSessionHandle? session)
     {
@@ -808,25 +772,68 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
             ? Collection.Find(filter)
             : Collection.Find(session, filter);
 
-        if (_options.OperationTimeout is { } timeout)
+        if (Options.OperationTimeout is { } timeout)
             fluent.Options.MaxTime = timeout;
+
+        if (Options.BatchSize is { } batchSize)
+            fluent.Options.BatchSize = batchSize;
 
         return fluent;
     }
 
-    private Task<long> CountCore(
+    /// <summary>
+    ///     Replaces one document, selected by a filter.
+    /// </summary>
+    protected async Task<ReplaceOneResult> ReplaceOneCoreAsync(
         FilterDefinition<TDocument> filter,
+        TDocument replacement,
+        bool upsert,
         IClientSessionHandle? session,
         CancellationToken cancellationToken)
     {
-        var options = CountOptionsOrNull();
+        await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
+
+        var options = new ReplaceOptions { IsUpsert = upsert };
 
         return session is null
-            ? Collection.CountDocumentsAsync(filter, options, cancellationToken)
-            : Collection.CountDocumentsAsync(session, filter, options, cancellationToken);
+            ? await Collection.ReplaceOneAsync(filter, replacement, options, cancellationToken)
+                .ConfigureAwait(false)
+            : await Collection.ReplaceOneAsync(session, filter, replacement, options, cancellationToken)
+                .ConfigureAwait(false);
     }
 
-    private async Task<UpdateResult> UpdateOneCoreAsync(
+    /// <summary>
+    ///     Replaces one document, selected by a filter, and returns one version of it.
+    /// </summary>
+    protected async Task<TDocument?> FindOneAndReplaceCoreAsync(
+        FilterDefinition<TDocument> filter,
+        TDocument replacement,
+        ReturnDocument returnDocument,
+        bool upsert,
+        IClientSessionHandle? session,
+        CancellationToken cancellationToken)
+    {
+        await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
+
+        var options = new FindOneAndReplaceOptions<TDocument>
+        {
+            ReturnDocument = returnDocument,
+            IsUpsert = upsert,
+            MaxTime = Options.OperationTimeout
+        };
+
+        return session is null
+            ? await Collection.FindOneAndReplaceAsync(filter, replacement, options, cancellationToken)
+                .ConfigureAwait(false)
+            : await Collection
+                .FindOneAndReplaceAsync(session, filter, replacement, options, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Applies a partial update to one document, selected by a filter.
+    /// </summary>
+    protected async Task<UpdateResult> UpdateOneCoreAsync(
         FilterDefinition<TDocument> filter,
         UpdateDefinition<TDocument> update,
         bool upsert,
@@ -844,7 +851,10 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
                 .ConfigureAwait(false);
     }
 
-    private async Task<long> DeleteOneCoreAsync(
+    /// <summary>
+    ///     Deletes one document, selected by a filter.
+    /// </summary>
+    protected async Task<long> DeleteOneCoreAsync(
         FilterDefinition<TDocument> filter,
         IClientSessionHandle? session,
         CancellationToken cancellationToken)
@@ -859,7 +869,10 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         return result.IsAcknowledged ? result.DeletedCount : 0;
     }
 
-    private long DeleteOneCore(FilterDefinition<TDocument> filter, IClientSessionHandle? session)
+    /// <summary>
+    ///     Deletes one document, selected by a filter, synchronously.
+    /// </summary>
+    protected long DeleteOneCore(FilterDefinition<TDocument> filter, IClientSessionHandle? session)
     {
         EnsureIndexes(CancellationToken.None);
 
@@ -870,8 +883,28 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
         return result.IsAcknowledged ? result.DeletedCount : 0;
     }
 
+    /// <summary>
+    ///     Builds a query already narrowed by a filter.
+    /// </summary>
+    protected IMongoQuery<TDocument> QueryCore(FilterDefinition<TDocument> filter)
+        => new MongoQuery<TDocument>(
+                Collection, _ensureIndexesAsync, Options.OperationTimeout, Options.BatchSize, null)
+            .Where(filter);
+
+    private Task<long> CountCore(
+        FilterDefinition<TDocument> filter,
+        IClientSessionHandle? session,
+        CancellationToken cancellationToken)
+    {
+        var options = CountOptionsOrNull();
+
+        return session is null
+            ? Collection.CountDocumentsAsync(filter, options, cancellationToken)
+            : Collection.CountDocumentsAsync(session, filter, options, cancellationToken);
+    }
+
     private CountOptions? CountOptionsOrNull()
-        => _options.OperationTimeout is { } timeout ? new CountOptions { MaxTime = timeout } : null;
+        => Options.OperationTimeout is { } timeout ? new CountOptions { MaxTime = timeout } : null;
 
     private static FilterDefinition<TDocument> ToFilter(Expression<Func<TDocument, bool>>? filter)
         => filter is null ? FilterDefinition<TDocument>.Empty : Filters.Where(filter);
@@ -882,7 +915,7 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     private static IMongoDatabase CreateDatabase(
         string connectionString,
         string databaseName,
-        MongoRepositoryOptions<TDocument, TKey>? options)
+        MongoRepositoryOptions<TDocument>? options)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
@@ -904,24 +937,63 @@ public sealed class MongoRepository<TDocument, TKey> : IMongoRepository<TDocumen
     }
 
     /// <summary>
-    ///     Reads the collection name off <see cref="BsonCollectionAttribute" />.
+    ///     Works out which collection to use, preferring the options over the attribute.
     /// </summary>
-    /// <exception cref="RepositoryException">
-    ///     Thrown when the attribute is missing or carries an empty name.
-    /// </exception>
-    private static string ResolveCollectionName()
+    /// <exception cref="RepositoryException">Thrown when neither source provides a name.</exception>
+    private static string ResolveCollectionName(MongoRepositoryOptions<TDocument> options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.CollectionName))
+            return options.CollectionName;
+
+        if (!string.IsNullOrWhiteSpace(AttributeCollectionName))
+            return AttributeCollectionName;
+
+        throw new RepositoryException(
+            $"No collection name for '{typeof(TDocument).Name}'. Either decorate the type with " +
+            "[BsonCollection(\"name\")], or set CollectionName on the repository options, which is how a " +
+            "type you do not own can be used as a document.");
+    }
+
+    /// <summary>
+    ///     Registers a class map for <typeparamref name="TDocument" /> that tolerates unmapped elements.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Needed by a document type with no identifier member: the server stores an <c>_id</c> on every
+    ///         document, and the default mapping rejects an element it cannot place.
+    ///     </para>
+    ///     <para>
+    ///         <c>TryRegisterClassMap</c> is a no-op when a map is already registered, so an explicit
+    ///         mapping set up by the application wins and calling this twice is harmless. Types the driver
+    ///         serialises without a class map are skipped, because registering one for
+    ///         <c>BsonDocument</c> would replace a serializer that already keeps every element.
+    ///     </para>
+    /// </remarks>
+    private static void ConfigureIgnoreExtraElements()
+    {
+        var type = typeof(TDocument);
+
+        if (!type.IsClass || typeof(BsonValue).IsAssignableFrom(type) || type == typeof(object))
+            return;
+
+        BsonClassMap.TryRegisterClassMap<TDocument>(map =>
+        {
+            map.AutoMap();
+            map.SetIgnoreExtraElements(true);
+        });
+    }
+
+    /// <summary>
+    ///     Reads the collection name off <see cref="BsonCollectionAttribute" />, if present.
+    /// </summary>
+    /// <remarks>
+    ///     Returns <see langword="null" /> rather than throwing when the attribute is absent, because the
+    ///     options may supply the name instead. The decision is deferred to
+    ///     <see cref="ResolveCollectionName" />, which can see both.
+    /// </remarks>
+    private static string? ResolveAttributeCollectionName()
     {
         var attribute = typeof(TDocument).GetCustomAttribute<BsonCollectionAttribute>(false);
-
-        if (attribute is null)
-            throw new RepositoryException(
-                $"'{typeof(TDocument).Name}' is missing [BsonCollection]. Add it to declare which " +
-                "collection the type is stored in, for example [BsonCollection(\"orders\")].");
-
-        if (string.IsNullOrWhiteSpace(attribute.CollectionName))
-            throw new RepositoryException(
-                $"[BsonCollection] on '{typeof(TDocument).Name}' has an empty collection name.");
-
-        return attribute.CollectionName;
+        return string.IsNullOrWhiteSpace(attribute?.CollectionName) ? null : attribute.CollectionName;
     }
 }

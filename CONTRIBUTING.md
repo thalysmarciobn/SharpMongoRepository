@@ -89,7 +89,7 @@ Every behavioural change needs a test, and the useful distinction is which kind:
   `Guid` key against a real server. Only an integration test catches that.
 
 A test that asserts a mock returns what it was configured to return is not a test. The suite this project
-replaced consisted entirely of those, and none of the nine defects fixed in 0.0.8 tripped it.
+replaced consisted entirely of those, and none of the nine defects fixed in 0.1.0 tripped it.
 
 Integration tests derive from the `mongodb` collection so they share one container, and each class works in
 its own database via `MongoFixture.NewDatabaseName()`, so they can run in any order.

@@ -10,7 +10,7 @@ using Xunit;
 namespace Tests.Unit;
 
 /// <summary>
-///     The 0.0.x entry points are kept as obsolete forwarders until 0.1.0, so they need to keep working
+///     The 0.0.x entry points are kept as obsolete forwarders until 0.2.0, so they need to keep working
 ///     rather than merely keep compiling.
 /// </summary>
 public class ObsoleteForwarderTests
@@ -53,7 +53,7 @@ public class ObsoleteForwarderTests
     public void Field_helper_unwraps_a_boxed_value_type_member()
     {
         var field = MongoDocument<Order, Guid>.Field(IndexDirection.Ascending, x => x.CreatedAt);
-        var index = MongoIndexes<Order, Guid>.Compound(field);
+        var index = MongoIndexes<Order>.Compound(field);
 
         Assert.Equal(new BsonDocument("CreatedAt", 1), index.RenderKeys());
     }
@@ -62,7 +62,7 @@ public class ObsoleteForwarderTests
     public void Field_helper_unwraps_a_boxed_nested_member()
     {
         var field = MongoDocument<Order, Guid>.Field(IndexDirection.Ascending, x => x.Address!.City);
-        var index = MongoIndexes<Order, Guid>.Compound(field);
+        var index = MongoIndexes<Order>.Compound(field);
 
         Assert.Equal(new BsonDocument("Address.city", 1), index.RenderKeys());
     }
@@ -75,7 +75,7 @@ public class ObsoleteForwarderTests
         services.AddMongoRepository<Order, Guid>(
             "mongodb://localhost:27017",
             "test",
-            [MongoIndexes<Order, Guid>.Ascending(x => x.Total)],
+            [MongoIndexes<Order>.Ascending(x => x.Total)],
             options => options.OperationTimeout = TimeSpan.FromSeconds(3));
 
         using var provider = services.BuildServiceProvider();
@@ -94,7 +94,7 @@ public class ObsoleteForwarderTests
         // A bare `null` here is ambiguous between the obsolete index-list overload and the current
         // configure-delegate one, so the type has to be stated. Documented in CHANGELOG.md.
         services.AddMongoRepository<Order, Guid>(
-            "mongodb://localhost:27017", "test", (List<MongoIndex<Order, Guid>>?)null);
+            "mongodb://localhost:27017", "test", (List<MongoIndex<Order>>?)null);
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();

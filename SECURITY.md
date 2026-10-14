@@ -4,12 +4,12 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.0.8 | Yes |
-| 0.0.7 and earlier | No. Upgrade to 0.0.8; see CHANGELOG.md for the migration. |
+| 0.1.x | Yes |
+| 0.0.x | No. Upgrade to 0.1.0; see CHANGELOG.md for the migration. |
 
-Releases up to 0.0.7 depend on MongoDB.Driver 3.4.0, which carries two known transitive advisories
+0.0.x releases depend on MongoDB.Driver 3.4.0, which carries two known transitive advisories
 (GHSA-pggp-6c3x-2xmx in Snappier, high; GHSA-6c8g-7p36-r338 in SharpCompress, moderate). They are fixed in
-0.0.8 and will not be patched on earlier releases.
+0.1.0 and will not be patched on the 0.0.x line.
 
 ## Reporting a vulnerability
 

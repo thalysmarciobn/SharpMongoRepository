@@ -8,15 +8,12 @@ namespace SharpMongoRepository.Indexing;
 ///     A complete index definition: the keys, and the options to create them with.
 /// </summary>
 /// <typeparam name="TDocument">Document type the index belongs to.</typeparam>
-/// <typeparam name="TKey">Type of the document's primary key.</typeparam>
 /// <remarks>
-///     Build instances through <see cref="MongoIndexes{TDocument,TKey}" /> rather than by hand. The factory
+///     Build instances through <see cref="MongoIndexes{TDocument}" /> rather than by hand. The factory
 ///     derives <see cref="CreateIndexOptions.Name" /> from the rendered BSON keys, which keeps the name in
 ///     step with the actual indexed fields and their directions.
 /// </remarks>
-public sealed class MongoIndex<TDocument, TKey>
-    where TDocument : IDocument<TKey>
-    where TKey : notnull
+public sealed class MongoIndex<TDocument>
 {
     /// <summary>
     ///     Gets the index key definition.

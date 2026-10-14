@@ -23,11 +23,18 @@ builder.Services.AddMongoRepository<WeatherForecast, Guid>(
     connectionString,
     databaseName,
     options => options
-        .AddIndex(MongoIndexes<WeatherForecast, Guid>.Ascending(x => x.Date))
-        .AddIndex(MongoIndexes<WeatherForecast, Guid>.Compound(
-            MongoIndexes<WeatherForecast, Guid>.Field(IndexDirection.Ascending, x => x.City),
-            MongoIndexes<WeatherForecast, Guid>.Field(IndexDirection.Descending, x => x.TemperatureC))),
+        .AddIndex(MongoIndexes<WeatherForecast>.Ascending(x => x.Date))
+        .AddIndex(MongoIndexes<WeatherForecast>.Compound(
+            MongoIndexes<WeatherForecast>.Field(IndexDirection.Ascending, x => x.City),
+            MongoIndexes<WeatherForecast>.Field(IndexDirection.Descending, x => x.TemperatureC))),
     configureClient: settings => settings.MaxConnectionPoolSize = 100);
+
+// A keyless repository: AuditEntry declares no key, no interface and no collection attribute, so the
+// collection name is given here. Reads go through the composable query.
+builder.Services.AddMongoRepository<AuditEntry>(
+    connectionString,
+    databaseName,
+    collectionName: "audit");
 
 builder.Services.AddSwaggerDocumentation();
 
@@ -175,6 +182,76 @@ app.MapDelete("/forecasts/{id:guid}", async (
     })
     .WithName("DeleteForecast")
     .WithSummary("Deletes one forecast.");
+
+// The composable query: conditions, sort and paging in one find command, with the count skipped so an
+// endless-scrolling list costs one round-trip instead of two.
+app.MapGet("/forecasts/search", async (
+        IMongoRepository<WeatherForecast, Guid> repository,
+        CancellationToken token,
+        string? city = null,
+        int? minTemperature = null,
+        int page = 1,
+        int pageSize = 20) =>
+    {
+        var query = repository.Query();
+
+        if (city is not null)
+            query = query.Where(x => x.City == city);
+
+        if (minTemperature is not null)
+            query = query.Where(x => x.TemperatureC >= minTemperature);
+
+        var result = await query
+            .OrderByDescending(x => x.Date)
+            .ThenBy(x => x.City)
+            .ToPageAsync(page, pageSize, includeTotal: false, cancellationToken: token);
+
+        return Results.Ok(result);
+    })
+    .WithName("SearchForecasts")
+    .WithSummary("Composable search; conditions are added only when supplied.");
+
+// Reads one field by key, without transferring the document.
+app.MapGet("/forecasts/{id:guid}/summary", async (
+        Guid id,
+        IMongoRepository<WeatherForecast, Guid> repository,
+        CancellationToken token) =>
+    {
+        var summary = await repository.QueryById(id).FirstOrDefaultAsync(x => x.Summary, token);
+
+        return summary is null ? Results.NotFound() : Results.Ok(new { summary });
+    })
+    .WithName("GetForecastSummary")
+    .WithSummary("Projects one field out of a document selected by key.");
+
+// A keyless document type: no key, so reads are filters.
+app.MapGet("/audit", (
+        IMongoRepository<AuditEntry> repository,
+        CancellationToken token,
+        string? actor = null) =>
+    {
+        var query = repository.Query();
+
+        if (actor is not null)
+            query = query.Where(x => x.Actor == actor);
+
+        return query.OrderByDescending(x => x.At).Take(100).ToAsyncEnumerable(token);
+    })
+    .WithName("StreamAuditEntries")
+    .WithSummary("Streams audit entries; the type declares no key.");
+
+app.MapPost("/audit", async (
+        AuditEntry entry,
+        IMongoRepository<AuditEntry> repository,
+        CancellationToken token) =>
+    {
+        entry.At = DateTime.UtcNow;
+        await repository.InsertOneAsync(entry, cancellationToken: token);
+
+        return Results.Accepted();
+    })
+    .WithName("CreateAuditEntry")
+    .WithSummary("Writes an audit entry; the server assigns its _id.");
 
 // A transaction spanning two writes. Requires a replica set; the docker-compose file in this folder
 // starts one.

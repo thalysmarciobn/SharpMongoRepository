@@ -8,7 +8,7 @@ namespace SharpMongoRepository;
 /// <typeparam name="TKey">
 ///     Type of the document's primary key. <c>ObjectId</c>, <see cref="System.Guid" /> and
 ///     <see cref="string" /> get an identifier generator out of the box; any other type requires
-///     <see cref="MongoRepositoryOptions{TDocument,TKey}.IdGenerator" /> or an identifier assigned by the caller.
+///     <see cref="MongoRepositoryOptions{TDocument}.IdGenerator" /> or an identifier assigned by the caller.
 /// </typeparam>
 /// <remarks>
 ///     <para>

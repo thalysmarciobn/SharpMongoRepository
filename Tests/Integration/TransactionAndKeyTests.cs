@@ -89,7 +89,7 @@ public class TransactionAndKeyTests(MongoFixture fixture) : IAsyncLifetime
     {
         var orders = new MongoRepository<Order, Guid>(
             fixture.CreateClient().GetDatabase(_database),
-            new MongoRepositoryOptions<Order, Guid>
+            new MongoRepositoryOptions<Order>
             {
                 IdGenerator = MongoDB.Bson.Serialization.IdGenerators.CombGuidGenerator.Instance
             });
@@ -212,7 +212,7 @@ public class TransactionAndKeyTests(MongoFixture fixture) : IAsyncLifetime
             fixture.ConnectionString,
             _database,
             options => options.AddIndex(
-                MongoIndexes<Order, Guid>.Ascending(x => x.CustomerEmail, unique: true)));
+                MongoIndexes<Order>.Ascending(x => x.CustomerEmail, unique: true)));
 
         using var host = builder.Build();
 
@@ -242,7 +242,7 @@ public class TransactionAndKeyTests(MongoFixture fixture) : IAsyncLifetime
         builder.Services.AddMongoRepository<Order, Guid>(
             "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=250&connectTimeoutMS=250",
             "unreachable",
-            options => options.AddIndex(MongoIndexes<Order, Guid>.Ascending(x => x.Total)));
+            options => options.AddIndex(MongoIndexes<Order>.Ascending(x => x.Total)));
 
         using var host = builder.Build();
 

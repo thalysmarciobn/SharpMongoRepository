@@ -7,7 +7,7 @@ namespace SharpMongoRepository.Indexing;
 /// </summary>
 /// <typeparam name="TDocument">Document type the index belongs to.</typeparam>
 /// <remarks>
-///     Build instances with <see cref="MongoIndexes{TDocument,TKey}.Field{TField}" />. The field selector is
+///     Build instances with <see cref="MongoIndexes{TDocument}.Field{TField}" />. The field selector is
 ///     captured as a strongly typed <see cref="IndexKeysDefinition{TDocument}" /> rather than as a string, so
 ///     nested paths (<c>x =&gt; x.Address.City</c>) and <c>[BsonElement]</c> renames resolve through the
 ///     driver's own field resolver.
