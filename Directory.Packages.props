@@ -32,19 +32,20 @@
         <PackageVersion Include="Swashbuckle.AspNetCore" Version="8.1.1" />
 
         <!--
-          Transitive pins. MongoDB.Driver 3.12.0 already depends on safe versions;
-          these pins keep an older driver resolution from reintroducing the
-          Snappier (GHSA-pggp-6c3x-2xmx) and SharpCompress (GHSA-6c8g-7p36-r338)
-          advisories through a different path.
+          Transitive pins. Only for packages that reach a project which is never published: a
+          PackageVersion for a transitive dependency is promoted into the referencing package's own
+          dependency list, which would make the library declare dependencies it does not use.
+
+          Snappier (GHSA-pggp-6c3x-2xmx) and SharpCompress (GHSA-6c8g-7p36-r338) are deliberately not
+          pinned here: MongoDB.Driver 3.12.0 already requires the fixed versions, and the vulnerability
+          scan in CI is what catches a regression.
         -->
-        <PackageVersion Include="Snappier" Version="1.3.1" />
         <!--
           Testcontainers 4.1.0 resolves SSH.NET 2024.1.0, which carries GHSA-mggc-4xg6-vcxf and
           GHSA-q939-rpr3-3284 (both high). Only the test project is affected, but a green
           the vulnerability scan is a gate in CI, so pin it forward.
         -->
         <PackageVersion Include="SSH.NET" Version="2026.0.0" />
-        <PackageVersion Include="SharpCompress" Version="0.48.1" />
     </ItemGroup>
 
 </Project>
