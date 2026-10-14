@@ -4,6 +4,9 @@ A MongoDB repository for .NET built on the official driver. It covers CRUD, part
 streaming reads, bulk writes, retrying transactions and declarative index management, without hiding the
 driver when you need it.
 
+Documents may declare a typed key or not: `IMongoRepository<TDocument, TKey>` adds key-based operations on
+top of `IMongoRepository<TDocument>`, which requires nothing of the document type at all.
+
 [![NuGet](https://img.shields.io/nuget/v/SharpMongoRepository.svg)](https://www.nuget.org/packages/SharpMongoRepository)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -49,10 +52,10 @@ builder.Services.AddMongoRepository<Order, Guid>(
     connectionString: "mongodb://localhost:27017",
     databaseName: "shop",
     options => options
-        .AddIndex(MongoIndexes<Order, Guid>.Ascending(x => x.CustomerEmail, unique: true))
-        .AddIndex(MongoIndexes<Order, Guid>.Compound(
-            MongoIndexes<Order, Guid>.Field(IndexDirection.Ascending, x => x.Status),
-            MongoIndexes<Order, Guid>.Field(IndexDirection.Descending, x => x.CreatedAt))));
+        .AddIndex(MongoIndexes<Order>.Ascending(x => x.CustomerEmail, unique: true))
+        .AddIndex(MongoIndexes<Order>.Compound(
+            MongoIndexes<Order>.Field(IndexDirection.Ascending, x => x.Status),
+            MongoIndexes<Order>.Field(IndexDirection.Descending, x => x.CreatedAt))));
 ```
 
 Inject and use it.
@@ -116,6 +119,118 @@ var exact = await repository.CountAsync(x => x.Status == "pending", cancellation
 var approximate = await repository.EstimateCountAsync(token);
 
 var statuses = await repository.DistinctAsync(x => x.Status, cancellationToken: token);
+```
+
+## Composable queries
+
+`Query()` builds one `find` command from conditions, sorts, paging and a projection. It is the comfortable
+way to read, and the only way when a document has no key to look up by.
+
+```csharp
+var page = await repository.Query()
+    .Where(x => x.Status == "pending")
+    .Where(x => x.Total > 100)                 // repeated Where combines with `and`
+    .WhereAny(x => x.Region == "BR",           // grouped with `or`, then `and`-ed against the rest
+              x => x.Region == "AR")
+    .OrderByDescending(x => x.CreatedAt)
+    .ThenBy(x => x.CustomerEmail)
+    .ToPageAsync(page: 1, pageSize: 20, cancellationToken: token);
+```
+
+Conditions can also come from the driver or from raw JSON, for operators a lambda cannot express:
+
+```csharp
+repository.Query().Where(Builders<Order>.Filter.In(x => x.Status, ["pending", "shipped"]));
+repository.Query().Where("{ tags: { $all: ['a', 'b'] } }");
+```
+
+Terminals, each with a projecting overload that sends only the fields you name:
+
+```csharp
+await query.ToListAsync(token);
+await query.ToListAsync(x => new { x.Total, x.CustomerEmail }, token);
+await query.FirstOrDefaultAsync(x => x.Status, token);   // one field, not the document
+await query.SingleOrDefaultAsync(token);                 // throws if a second document matches
+await query.CountAsync(token);                           // ignores Skip and Take
+await query.AnyAsync(token);                             // stops at the first match
+await foreach (var o in query.ToAsyncEnumerable(token)) { }
+```
+
+Performance levers: `WithBatchSize` to cap what a streaming read holds, `WithHint` to force an index when
+the planner picks wrong, `AllowDiskUse` for a large unindexed sort, `WithMaxTime` for a server-side cap.
+
+For an endless-scrolling list, skip the count. It halves the round-trips and avoids scanning the whole
+match set:
+
+```csharp
+var page = await query.ToPageAsync(1, 20, includeTotal: false, token);
+
+page.HasTotalCount   // false
+page.TotalCount      // PagedResult<T>.TotalCountNotCounted (-1, not 0)
+page.HasNextPage     // inferred from the page being full
+```
+
+The builder is immutable, so a partially built query is safe to keep and branch from:
+
+```csharp
+var pending = repository.Query().Where(x => x.Status == "pending");
+
+var cheap = await pending.Where(x => x.Total < 100).CountAsync(token);
+var all = await pending.CountAsync(token);   // unaffected by the branch above
+```
+
+## Documents without a key
+
+`IDocument<TKey>` is optional. Drop it and you lose the `ById` methods; everything else, the query builder
+included, works unchanged.
+
+```csharp
+// No interface, no attribute, not even a type you own.
+public sealed class AuditEntry
+{
+    public string Action { get; set; } = string.Empty;
+    public string Actor { get; set; } = string.Empty;
+}
+
+builder.Services.AddMongoRepository<AuditEntry>(
+    connectionString, databaseName, collectionName: "audit");
+```
+
+```csharp
+app.MapGet("/audit", (IMongoRepository<AuditEntry> repository, string actor, CancellationToken token) =>
+    repository.Query().Where(x => x.Actor == actor).OrderByDescending(x => x.At).ToListAsync(token));
+```
+
+One thing to know: a type with no identifier member needs `[BsonIgnoreExtraElements]`, because the server
+stores an `_id` on every document and the default mapping rejects an element it cannot place. Where the
+type is not yours to decorate, the option does the same:
+
+```csharp
+builder.Services.AddMongoRepository<ExternalModel>(
+    connectionString, databaseName, "external",
+    options => options.IgnoreExtraElements = true);
+```
+
+For a collection with no fixed shape, use `BsonDocument` and filter by field name:
+
+```csharp
+builder.Services.AddMongoRepository<BsonDocument>(connectionString, databaseName, "events");
+
+var clicks = await repository.Query()
+    .WhereField("kind", "click")
+    .OrderBy(x => x["at"])
+    .ToListAsync(token);
+```
+
+A keyed repository also resolves as the keyless interface from the same registration, so a consumer that
+only filters can depend on the narrower contract:
+
+```csharp
+builder.Services.AddMongoRepository<Order, Guid>(connectionString, databaseName);
+
+// Both resolve, and to the same instance.
+app.MapGet("/a", (IMongoRepository<Order, Guid> keyed) => ...);
+app.MapGet("/b", (IMongoRepository<Order> keyless) => ...);
 ```
 
 ## Writing
@@ -203,20 +318,20 @@ Index names follow the server's own convention, derived from the rendered keys, 
 the name and an ascending and a descending index on one field co-exist.
 
 ```csharp
-MongoIndexes<Order, Guid>.Ascending(x => x.CustomerEmail, unique: true);   // customer_email_1
-MongoIndexes<Order, Guid>.Descending(x => x.CreatedAt);                    // CreatedAt_-1
-MongoIndexes<Order, Guid>.Ascending(x => x.Address.City);                  // Address.city_1
+MongoIndexes<Order>.Ascending(x => x.CustomerEmail, unique: true);   // customer_email_1
+MongoIndexes<Order>.Descending(x => x.CreatedAt);                    // CreatedAt_-1
+MongoIndexes<Order>.Ascending(x => x.Address.City);                  // Address.city_1
 
-MongoIndexes<Order, Guid>.Compound(
-    MongoIndexes<Order, Guid>.Field(IndexDirection.Ascending, x => x.Status),
-    MongoIndexes<Order, Guid>.Field(IndexDirection.Descending, x => x.CreatedAt));
+MongoIndexes<Order>.Compound(
+    MongoIndexes<Order>.Field(IndexDirection.Ascending, x => x.Status),
+    MongoIndexes<Order>.Field(IndexDirection.Descending, x => x.CreatedAt));
 
-MongoIndexes<Order, Guid>.TimeToLive(x => x.CreatedAt, TimeSpan.FromDays(90));
-MongoIndexes<Order, Guid>.Text(x => x.Notes);
-MongoIndexes<Order, Guid>.Hashed(x => x.CustomerEmail);
+MongoIndexes<Order>.TimeToLive(x => x.CreatedAt, TimeSpan.FromDays(90));
+MongoIndexes<Order>.Text(x => x.Notes);
+MongoIndexes<Order>.Hashed(x => x.CustomerEmail);
 
 // Sparse, partial filters and anything else on CreateIndexOptions.
-MongoIndexes<Order, Guid>.Ascending(x => x.Total, configure: o => o.Sparse = true);
+MongoIndexes<Order>.Ascending(x => x.Total, configure: o => o.Sparse = true);
 ```
 
 Nested paths and `[BsonElement]` renames resolve through the driver's own field resolver, so
@@ -242,7 +357,7 @@ builder.Services.AddMongoRepository<Order, Guid>(
     databaseName,
     options =>
     {
-        options.AddIndex(MongoIndexes<Order, Guid>.Ascending(x => x.CustomerEmail));
+        options.AddIndex(MongoIndexes<Order>.Ascending(x => x.CustomerEmail));
 
         // A server-side execution cap, sent as maxTimeMS. For client-side deadlines, pass a
         // CancellationToken to the operation instead.
@@ -256,6 +371,12 @@ builder.Services.AddMongoRepository<Order, Guid>(
         // Recommended for Guid keys: a COMB GUID embeds a timestamp, so inserts cluster at one end of
         // the _id index instead of scattering across it and splitting pages.
         options.IdGenerator = CombGuidGenerator.Instance;
+
+        // Override the [BsonCollection] attribute, or stand in for it entirely.
+        options.CollectionName = "orders";
+
+        // A default batch size for reads that stream.
+        options.BatchSize = 500;
 
         options.IndexCreation = IndexCreationMode.Startup;
         options.RecreateChangedIndexes = false;
@@ -343,8 +464,12 @@ The design choices that matter under load, and why:
   the result set.
 - **Deletes use `deleteOne`/`deleteMany`**, not `findOneAndDelete`, so a deleted document is not sent back
   over the wire to be discarded.
-- **`params ReadOnlySpan<T>`** on the index factory, so declaring indexes allocates no arrays. On
-  `net8.0` this relies on an internal `ParamCollectionAttribute` polyfill.
+- **`params ReadOnlySpan<T>`** on the index factory and `WhereAny`, so neither allocates arrays at the
+  call site. On `net8.0` this relies on an internal `ParamCollectionAttribute` polyfill.
+- **`ToPageAsync(includeTotal: false)`** turns two round-trips into one and skips a count that scans the
+  whole match set.
+- **The collection name is resolved once per document type** into a `static readonly` field, so the
+  attribute reflection never recurs.
 - **`System.Threading.Lock`** on `net9.0` and above, falling back to a plain object monitor on `net8.0`.
 - **`ConfigureAwait(false)`** throughout, so no synchronization context is captured.
 

@@ -4,9 +4,11 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.8]
+## [0.1.0]
 
-A correctness and performance release. It contains breaking changes; every one has a migration below.
+A correctness, performance and ergonomics release. It contains breaking changes; every one has a migration
+below. Note that 0.0.8 and 0.0.9 were never published: the work that carried those numbers during
+development is folded in here, so the step from the last published release, 0.0.7, is a single one.
 
 ### Fixed
 
@@ -44,6 +46,49 @@ A correctness and performance release. It contains breaking changes; every one h
   (GHSA-pggp-6c3x-2xmx, high) and SharpCompress 0.30.1 (GHSA-6c8g-7p36-r338, moderate). The driver is now
   3.12.0, and CI fails on any vulnerable package, transitive ones included.
 
+### Added: the key is now optional
+
+The repository no longer requires documents to implement `IDocument<TKey>`.
+
+- **`IMongoRepository<TDocument>`**, a keyless repository with no constraint on `TDocument` at all. It can
+  be used with a type you do not own, a shared DTO, or `BsonDocument` for a collection with no fixed shape.
+  `IMongoRepository<TDocument, TKey>` now derives from it, so a keyed repository is a keyless one plus the
+  `ById` methods, and both resolve from one registration: a consumer that only reads and writes by filter
+  can depend on the narrower interface.
+- **`MongoRepositoryOptions.CollectionName`**, which makes `[BsonCollection]` optional. It is also the way
+  to point two repositories over one type at different collections, a live one and an archive. When neither
+  is present the error names both ways to fix it.
+- **`MongoRepositoryOptions.IgnoreExtraElements`**, for a type with no identifier member. The server stores
+  an `_id` on every document, and the default BSON mapping rejects an element it cannot place, so such a
+  type is unreadable without either this option or `[BsonIgnoreExtraElements]` on the type itself. The
+  attribute is preferable where you own the type; the option exists for where you do not.
+
+### Added: a composable query, so dropping the key costs nothing
+
+Without a key, reads are expressed as filters, which the previous surface made awkward.
+`IMongoRepository.Query()` returns an `IMongoQuery<TDocument>` that builds one `find` command:
+
+- `Where` for a predicate, a driver `FilterDefinition`, or raw JSON; repeated calls combine with `and`.
+- `WhereField(name, value)` to filter on a field named at run time, which is what a document with no
+  compile-time shape needs. A member name resolves through the class map, so `[BsonElement]` renames and
+  the member's own serializer are picked up; a dotted path reaches into a nested document.
+- `WhereAny(...)` to group alternatives with `or` and combine the group with `and` against the rest, which
+  is almost always what is meant and easy to get wrong by hand.
+- `OrderBy` / `OrderByDescending` / `ThenBy` / `ThenByDescending`, `Skip`, `Take`.
+- `WithHint`, `WithBatchSize`, `WithMaxTime`, `AllowDiskUse`, `InSession`.
+- Terminals: `ToListAsync`, `ToAsyncEnumerable`, `FirstOrDefaultAsync`, `SingleOrDefaultAsync`,
+  `CountAsync`, `AnyAsync`, `ToPageAsync`, each with a projecting overload that sends only the fields asked
+  for, plus `ToFindFluent` and `RenderFilter` as escape hatches.
+- `QueryById(key)` on the keyed repository, for reading part of a document by key without transferring it.
+
+The builder is immutable: each call returns a new query, so a half-built query held in a field can be
+branched from without one branch's conditions leaking into another.
+
+`ToPageAsync(page, size, includeTotal: false)` skips the count, halving the round-trips and avoiding a scan
+of the whole match set. `PagedResult.TotalCount` is then `TotalCountNotCounted` (-1, deliberately not 0, so
+an uncounted page cannot be mistaken for an empty one) and `HasNextPage` is inferred from the page being
+full, which is what an endless-scrolling list needs.
+
 ### Added
 
 - `CancellationToken` on every asynchronous method.
@@ -68,6 +113,9 @@ A correctness and performance release. It contains breaking changes; every one h
 - Driver diagnostics are routed into the application's `ILoggerFactory` when one is registered.
 - `net8.0` and `net10.0` targets alongside `net9.0`.
 - SourceLink, so the published `.snupkg` can step into library code.
+- `MongoRepositoryOptions.BatchSize`, a default batch size for reads that stream.
+- `IMongoRepository.CollectionName`, so the resolved collection is observable.
+- Keyless registration overloads, and `AddMongoClient` for registering the client on its own.
 
 ### Changed
 
@@ -84,10 +132,17 @@ A correctness and performance release. It contains breaking changes; every one h
   the code never had.
 - **`OperationTimeout` defaults to `null`** and applies only to reads and counts, as `maxTimeMS`. Use a
   `CancellationToken` for client-side deadlines.
+- **`MongoIndexes`, `MongoIndex` and `MongoRepositoryOptions` lost their key type parameter.** Nothing in
+  any of the three ever depended on it, and carrying it meant writing
+  `MongoIndexes<Order, Guid>.Ascending(...)` where `MongoIndexes<Order>.Ascending(...)` says the same
+  thing. It was also what blocked the keyless repository, which has no key type to supply.
+- `MongoRepository.CollectionName` is an instance member rather than a static one, because the options can
+  now override the attribute.
 - The test suite was replaced. It previously mocked `IMongoRepository` and asserted that the mock returned
-  what it had been configured to return, which exercised none of the library. There are now unit tests over
-  index naming, key generation and registration, plus integration tests against a real MongoDB replica set
-  via Testcontainers.
+  what it had been configured to return, which exercised none of the library. There are now 149 tests: unit
+  tests over index naming, key generation and registration, and integration tests against a real MongoDB
+  replica set via Testcontainers covering CRUD, the query builder, the keyless path, indexes and
+  transactions.
 
 ### Removed
 
@@ -115,6 +170,10 @@ A correctness and performance release. It contains breaking changes; every one h
 | `IDocument<TKey>.Id` typed `TKey?` | typed `TKey`, with `TKey : notnull` |
 | Namespaces `.Interface`, `.Attributes`, `.Exceptions`, `.Configuration` | all in `SharpMongoRepository` |
 | Namespace `.Enum`, `.Compound` | `SharpMongoRepository.Indexing` |
+| `MongoIndexes<T, TKey>.Ascending(...)` | `MongoIndexes<T>.Ascending(...)` |
+| `MongoIndex<T, TKey>` | `MongoIndex<T>` |
+| `MongoRepositoryOptions<T, TKey>` | `MongoRepositoryOptions<T>` |
+| `MongoRepository<T, TKey>.CollectionName` (static) | `repository.CollectionName` (instance) |
 
 `MongoDocument<T, TKey>` and the old `AddMongoRepository` overload remain as `[Obsolete]` forwarders so the
 compiler points at the replacement. Both will be removed in 0.1.0.

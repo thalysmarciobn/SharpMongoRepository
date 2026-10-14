@@ -12,7 +12,7 @@
 
     <PropertyGroup Label="Package">
         <PackageId>SharpMongoRepository</PackageId>
-        <Version>0.0.8</Version>
+        <Version>0.1.0</Version>
         <Title>SharpMongoRepository</Title>
         <Authors>ThalysMarcioBN</Authors>
         <Company>ThalysMarcioBN</Company>
@@ -23,7 +23,7 @@
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageTags>mongodb;mongo;repository;database;nosql;dotnet</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageReleaseNotes>See CHANGELOG.md. 0.0.8 contains breaking changes; the file lists each one with its migration.</PackageReleaseNotes>
+        <PackageReleaseNotes>See CHANGELOG.md. 0.1.0 contains breaking changes; the file lists each one with its migration.</PackageReleaseNotes>
     </PropertyGroup>
 
     <PropertyGroup Label="Symbols and SourceLink">
