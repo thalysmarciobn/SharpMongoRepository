@@ -1,21 +1,25 @@
-namespace SharpMongoRepository.Attributes;
+namespace SharpMongoRepository;
 
 /// <summary>
-///     Specifies the MongoDB collection name for a document type.
+///     Declares which MongoDB collection a document type is stored in.
 /// </summary>
 /// <remarks>
-///     This attribute is used to decorate document classes to indicate
-///     which MongoDB collection they should be stored in.
-///     The attribute is not inherited by derived classes.
+///     The repository resolves the name once per closed generic type and caches it in a static field,
+///     so the reflection cost is paid a single time per document type for the lifetime of the process
+///     rather than on every repository construction.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class, Inherited = false)]
-public class BsonCollectionAttribute(string? collectionName) : Attribute
+/// <example>
+///     <code>
+///     [BsonCollection("orders")]
+///     public sealed class Order : IDocument&lt;Guid&gt; { public Guid Id { get; set; } }
+///     </code>
+/// </example>
+/// <param name="collectionName">Name of the collection. Must not be empty or whitespace.</param>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
+public sealed class BsonCollectionAttribute(string collectionName) : Attribute
 {
     /// <summary>
-    ///     Gets the name of the MongoDB collection for the decorated document type.
+    ///     Gets the collection name documents of the decorated type are stored in.
     /// </summary>
-    /// <value>
-    ///     The name of the MongoDB collection where documents of this type will be stored.
-    /// </value>
-    public string? CollectionName { get; } = collectionName;
+    public string CollectionName { get; } = collectionName;
 }

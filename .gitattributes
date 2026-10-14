@@ -1,0 +1,13 @@
+# Normalise line endings so .editorconfig's crlf setting and `dotnet format` agree regardless of the
+# platform a contributor works on.
+* text=auto eol=crlf
+
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.snk binary
+*.nupkg binary

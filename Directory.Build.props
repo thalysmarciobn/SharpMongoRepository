@@ -1,0 +1,26 @@
+<Project>
+
+    <!-- Settings shared by every project in the repository. -->
+    <PropertyGroup>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+
+        <!-- Analyzers. Warnings are errors in CI so nothing rots silently. -->
+        <!--
+          Documentation files are generated everywhere, because IDE0005 (unnecessary using) only runs when
+          they are. CS1591, the missing-documentation warning, is switched off for Tests and Examples in
+          .editorconfig rather than project-wide, so the library itself stays fully documented.
+        -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors>
+
+        <!-- Reproducible builds. -->
+        <Deterministic>true</Deterministic>
+        <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+    </PropertyGroup>
+
+</Project>

@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # One pull request per family, so a routine bump is one review rather than six.
+      mongodb:
+        patterns: [ "MongoDB.*" ]
+      microsoft-extensions:
+        patterns: [ "Microsoft.Extensions.*" ]
+      test:
+        patterns: [ "xunit*", "Microsoft.NET.Test.Sdk", "coverlet.*", "Testcontainers.*" ]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,39 +1,48 @@
-using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
-namespace SharpMongoRepository.Interface;
+namespace SharpMongoRepository;
 
 /// <summary>
-///     Base interface for MongoDB documents to be stored in the repository.
-///     Defines the minimum structure that all persisted entities must implement.
+///     Contract every document stored through <see cref="IMongoRepository{TDocument,TKey}" /> must satisfy.
 /// </summary>
+/// <typeparam name="TKey">
+///     Type of the document's primary key. <c>ObjectId</c>, <see cref="System.Guid" /> and
+///     <see cref="string" /> get an identifier generator out of the box; any other type requires
+///     <see cref="MongoRepositoryOptions{TDocument,TKey}.IdGenerator" /> or an identifier assigned by the caller.
+/// </typeparam>
 /// <remarks>
-///     This interface ensures all documents have a consistent ID field format
-///     and can be properly serialized/deserialized by the MongoDB driver.
+///     <para>
+///         The MongoDB driver maps the primary key by convention: a member named <c>Id</c> becomes <c>_id</c>.
+///         The <see cref="BsonIdAttribute" /> below documents that intent but does not drive the mapping,
+///         because BSON class mapping inspects the implementing class rather than its interfaces. If the
+///         implementing type names its key something other than <c>Id</c>, it must apply
+///         <see cref="BsonIdAttribute" /> itself.
+///     </para>
+///     <para>
+///         <typeparamref name="TKey" /> is constrained to <c>notnull</c> so consumers do not have to
+///         null-forgive every access to <see cref="Id" />.
+///     </para>
 /// </remarks>
-public interface IDocument<T>
+/// <example>
+///     <code>
+///     [BsonCollection("orders")]
+///     public sealed class Order : IDocument&lt;Guid&gt;
+///     {
+///         public Guid Id { get; set; }
+///         public string Customer { get; set; } = string.Empty;
+///     }
+///     </code>
+/// </example>
+public interface IDocument<TKey>
+    where TKey : notnull
 {
     /// <summary>
-    ///     Gets or sets the unique identifier for the MongoDB document.
+    ///     Gets or sets the document's primary key, stored as <c>_id</c>.
     /// </summary>
-    /// <value>
-    ///     The ObjectId that uniquely identifies this document in the collection.
-    /// </value>
     /// <remarks>
-    ///     This property is decorated with MongoDB driver attributes:
-    ///     <list type="bullet">
-    ///         <item>
-    ///             <description>[BsonId] - Marks this property as the primary key</description>
-    ///         </item>
-    ///         <item>
-    ///             <description>
-    ///                 [BsonRepresentation(BsonType.String)] - Specifies the ID should be stored as string in the
-    ///                 database
-    ///             </description>
-    ///         </item>
-    ///     </list>
-    ///     The ObjectId type provides document uniqueness and includes timestamp information.
+    ///     Leave it at its default value on insert to have the repository generate one. The setter is
+    ///     required precisely so that generated identifiers can be written back onto the instance you passed in.
     /// </remarks>
     [BsonId]
-    public T? Id { get; set; }
+    TKey Id { get; set; }
 }

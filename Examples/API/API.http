@@ -1,6 +1,38 @@
-@API_HostAddress = http://localhost:5081
+@host = http://localhost:5081
 
-GET {{API_HostAddress}}/weatherforecast/
+### Create one forecast
+POST {{host}}/forecasts
+Content-Type: application/json
+
+{ "date": "2026-10-14", "temperatureC": 21, "summary": "Mild", "city": "Natal" }
+
+### Create several in one round-trip
+POST {{host}}/forecasts/batch
+Content-Type: application/json
+
+[
+  { "date": "2026-10-15", "temperatureC": 28, "summary": "Hot", "city": "Natal" },
+  { "date": "2026-10-16", "temperatureC": 17, "summary": "Cool", "city": "Curitiba" }
+]
+
+### Stream every forecast
+GET {{host}}/forecasts
 Accept: application/json
 
-###
+### One page, newest first
+GET {{host}}/forecasts/page?page=1&pageSize=10
+Accept: application/json
+
+### A projection rather than whole documents
+GET {{host}}/forecasts/summaries
+Accept: application/json
+
+### Distinct cities
+GET {{host}}/forecasts/cities
+Accept: application/json
+
+### Partial update: one field, no document resend
+PATCH {{host}}/forecasts/00000000-0000-0000-0000-000000000000/temperature?temperatureC=30
+
+### Reassign a city inside a transaction
+POST {{host}}/forecasts/move-city?fromCity=Natal&toCity=Recife
