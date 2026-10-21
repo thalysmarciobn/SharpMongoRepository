@@ -29,7 +29,7 @@
 
         <!-- Example API -->
         <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
-        <PackageVersion Include="Swashbuckle.AspNetCore" Version="8.1.1" />
+        <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
 
         <!--
           Transitive pins. Only for packages that reach a project which is never published: a
