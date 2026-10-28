@@ -28,7 +28,7 @@
         <PackageVersion Include="Testcontainers.MongoDb" Version="4.1.0" />
 
         <!-- Example API -->
-        <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
+        <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
         <PackageVersion Include="Swashbuckle.AspNetCore" Version="8.1.1" />
 
         <!--
