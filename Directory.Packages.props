@@ -11,8 +11,8 @@
 
     <ItemGroup>
         <!-- Library -->
-        <PackageVersion Include="MongoDB.Bson" Version="3.12.0" />
-        <PackageVersion Include="MongoDB.Driver" Version="3.12.0" />
+        <PackageVersion Include="MongoDB.Bson" Version="3.13.0" />
+        <PackageVersion Include="MongoDB.Driver" Version="3.13.0" />
         <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
         <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
         <PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.0" />
