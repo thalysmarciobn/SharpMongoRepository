@@ -26,7 +26,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # SourceLink needs the full history to resolve the commit it stamps into the symbols.
           fetch-depth: 0
@@ -87,7 +87,7 @@ jobs:
           --output ./artifacts
 
       - name: Upload the package as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SharpMongoRepository-${{ steps.version.outputs.version }}
           path: ./artifacts/*
